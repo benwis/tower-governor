@@ -1,0 +1,21 @@
+[package]
+name = "axum-governor"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+axum = "0.5.16"
+axum-client-ip = "0.2.0"
+backoff = "0.4.0"
+forwarded-header-value = "0.1.1"
+futures = "0.3.24"
+governor = "0.5.0"
+http = "0.2.8"
+pin-project = "1.0.12"
+redis_rs = "0.9.0"
+thiserror = "1.0.37"
+tokio = "1.21.2"
+tower = "0.4.13"
+tower-layer = "0.3.1"
