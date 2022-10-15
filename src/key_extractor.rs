@@ -70,7 +70,6 @@ impl KeyExtractor for GlobalKeyExtractor {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// A [KeyExtractor] that uses peer IP as key. **This is the default key extractor and [it may no do want you want](PeerIpKeyExtractor).**
 ///
 /// **Warning:** this key extractor enforces rate limiting based on the **_peer_ IP address**.
@@ -81,6 +80,7 @@ impl KeyExtractor for GlobalKeyExtractor {
 /// If this is not the behavior you want, you may:
 /// - implement your own [KeyExtractor] that tries to get IP from the `Forwarded` or `X-Forwarded-For` headers that most reverse proxies set
 /// - make absolutely sure that you only trust these headers when the peer IP is the IP of your reverse proxy (otherwise any user could set them to fake its IP)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PeerIpKeyExtractor;
 
 impl KeyExtractor for PeerIpKeyExtractor {
@@ -110,7 +110,6 @@ impl KeyExtractor for PeerIpKeyExtractor {
         Some(key.to_string())
     }
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// A [KeyExtractor] that uses peer IP as key. **This is the default key extractor and [it may no do want you want](PeerIpKeyExtractor).**
 ///
 /// **Warning:** this key extractor enforces rate limiting based on the **_peer_ IP address**.
@@ -121,6 +120,7 @@ impl KeyExtractor for PeerIpKeyExtractor {
 /// If this is not the behavior you want, you may:
 /// - implement your own [KeyExtractor] that tries to get IP from the `Forwarded` or `X-Forwarded-For` headers that most reverse proxies set
 /// - make absolutely sure that you only trust these headers when the peer IP is the IP of your reverse proxy (otherwise any user could set them to fake its IP)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SmartIpKeyExtractor;
 
 impl KeyExtractor for SmartIpKeyExtractor {

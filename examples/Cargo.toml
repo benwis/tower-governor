@@ -1,0 +1,21 @@
+[package]
+authors = ["Ben Wishovich <ben@benw.is>"]
+edition = "2021"
+license = "MIT"
+name = "examples"
+publish = false
+version = "0.1.0"
+
+[[bin]]
+name = "basic"
+path = "src/basic.rs"
+
+
+
+[dependencies]
+axum = "0.5.16"
+axum_governor={path="../"}
+tokio = { version = "1.21.2", features = ["full"] }
+
+
+

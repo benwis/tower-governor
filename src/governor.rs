@@ -8,8 +8,8 @@ use governor::{
 use http::Method;
 use std::{marker::PhantomData, num::NonZeroU32, sync::Arc, time::Duration};
 
-const DEFAULT_PERIOD: Duration = Duration::from_millis(500);
-const DEFAULT_BURST_SIZE: u32 = 8;
+pub const DEFAULT_PERIOD: Duration = Duration::from_millis(500);
+pub const DEFAULT_BURST_SIZE: u32 = 8;
 
 // Required by Governor's RateLimiter to share it across threads
 // See Governor User Guide: https://docs.rs/governor/0.5.0/governor/_guide/index.html
@@ -24,7 +24,7 @@ pub type SharedRateLimiter<Key, M> =
 /// that replenishes one element every minute.
 ///
 /// ```rust
-/// use axum_governor::GovernorConfigBuilder;
+/// use axum_governor::governor::GovernorConfigBuilder;
 ///
 /// let config = GovernorConfigBuilder::default()
 ///     .per_second(60)
@@ -36,7 +36,7 @@ pub type SharedRateLimiter<Key, M> =
 /// with x-ratelimit headers
 ///
 /// ```rust
-/// use axum_governor::GovernorConfigBuilder;
+/// use axum_governor::governor::GovernorConfigBuilder;
 ///
 /// let config = GovernorConfigBuilder::default()
 ///     .per_second(60)
@@ -254,6 +254,7 @@ impl<M: RateLimitingMiddleware<QuantaInstant>> GovernorConfig<PeerIpKeyExtractor
 
 /// Governor middleware factory. Hand this a GovernorConfig and it'll create this struct, which
 /// contains everything needed to implement a middleware
+#[derive(Debug, Clone)]
 pub struct Governor<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S> {
     pub key_extractor: K,
     pub limiter: SharedRateLimiter<K::Key, M>,
