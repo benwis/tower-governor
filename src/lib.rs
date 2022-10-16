@@ -9,7 +9,8 @@ pub mod key_extractor;
 use crate::governor::{Governor, GovernorConfig};
 use ::governor::clock::{Clock, DefaultClock, QuantaInstant};
 use ::governor::middleware::{NoOpMiddleware, RateLimitingMiddleware, StateInformationMiddleware};
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
+use futures::future::Either;
 use futures_core::ready;
 
 use http::header::{HeaderName, HeaderValue};
@@ -44,11 +45,10 @@ where
 }
 
 // Implement tower::Service for Governor
-impl<K, S, ReqBody, ResBody> Service<Request<ReqBody>> for Governor<K, NoOpMiddleware, S>
+impl<K, S, ReqBody> Service<Request<ReqBody>> for Governor<K, NoOpMiddleware, S>
 where
     K: KeyExtractor,
-    S: Service<Request<ReqBody>, Response = Response<ResBody>>,
-    ResBody: Default,
+    S: Service<Request<ReqBody>, Response = Response>,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -106,12 +106,13 @@ where
                         inner: Kind::Error {
                             code: StatusCode::TOO_MANY_REQUESTS,
                             headers: Some(headers),
+                            msg: Some("Too Many Requests!".to_string()),
                         },
                     }
                 }
             },
 
-            Err(_) => {
+            Err(e) => {
                 // Not sure if I should do this, but not sure how to return an Error
                 // in a match arm like this
                 // future::err(e.into())
@@ -119,6 +120,7 @@ where
                     inner: Kind::Error {
                         headers: None,
                         code: StatusCode::INTERNAL_SERVER_ERROR,
+                        msg: Some(e.to_string()),
                     },
                 }
             }
@@ -153,23 +155,27 @@ enum Kind<F> {
         #[pin]
         future: F,
     },
+    // Error {
+    //     code: StatusCode,
+    //     headers: Option<HeaderMap>,
+    // },
     Error {
         code: StatusCode,
         headers: Option<HeaderMap>,
+        msg: Option<String>,
     },
 }
 
-impl<F, B, E> Future for ResponseFuture<F>
+impl<F, E> Future for ResponseFuture<F>
 where
-    F: Future<Output = Result<Response<B>, E>>,
-    B: Default,
+    F: Future<Output = Result<Response, E>>,
 {
-    type Output = Result<Response<B>, E>;
+    type Output = Result<Response, E>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project().inner.project() {
             KindProj::Passthrough { future } => {
-                let response: Response<B> = ready!(future.poll(cx))?;
+                let response: Response = ready!(future.poll(cx))?;
                 Poll::Ready(Ok(response))
             }
             KindProj::RateLimitHeader {
@@ -177,7 +183,7 @@ where
                 burst_size,
                 remaining_burst_capacity,
             } => {
-                let mut response: Response<B> = ready!(future.poll(cx))?;
+                let mut response = ready!(future.poll(cx))?;
 
                 let mut headers = HeaderMap::new();
                 headers.insert(
@@ -193,7 +199,7 @@ where
                 Poll::Ready(Ok(response))
             }
             KindProj::WhitelistedHeader { future } => {
-                let mut response: Response<B> = ready!(future.poll(cx))?;
+                let mut response = ready!(future.poll(cx))?;
 
                 let headers = response.headers_mut();
                 headers.insert(
@@ -203,28 +209,46 @@ where
 
                 Poll::Ready(Ok(response))
             }
-            KindProj::Error { code, headers } => {
-                let mut response = Response::new(B::default());
+            // KindProj::Error { code, headers } => {
+            //     let mut response = Response::new();
 
-                // Let's build the an error response here!
-                *response.status_mut() = *code;
-                if let Some(headers) = headers {
-                    response.headers_mut().extend(headers.drain());
+            //     // Let's build the an error response here!
+            //     *response.status_mut() = *code;
+            //     if let Some(headers) = headers {
+            //         response.headers_mut().extend(headers.drain());
+            //     }
+
+            //     Poll::Ready(Ok(response))
+            // }
+            KindProj::Error { code, headers, msg } => {
+                let mut response = Response::builder().status(*code);
+
+                let headers = match headers {
+                    Some(h) => h.clone(),
+                    None => HeaderMap::new(),
+                };
+                // No way to panic since we just created the response above
+                for (key, value) in headers.iter() {
+                    response.headers_mut().unwrap().insert(key, value.clone());
+                }
+                let res;
+                if let Some(msg) = msg {
+                    res = response.body(msg.to_owned()).unwrap();
+                } else {
+                    res = response.body("".to_string()).unwrap();
                 }
 
-                Poll::Ready(Ok(response))
+                Poll::Ready(Ok(res.into_response()))
             }
         }
     }
 }
 
 // Implementation of Service for Governor using the StateInformationMiddleware.
-impl<K, S, ReqBody, ResBody> Service<Request<ReqBody>>
-    for Governor<K, StateInformationMiddleware, S>
+impl<K, S, ReqBody> Service<Request<ReqBody>> for Governor<K, StateInformationMiddleware, S>
 where
     K: KeyExtractor,
-    S: Service<Request<ReqBody>, Response = Response<ResBody>>,
-    ResBody: Default,
+    S: Service<Request<ReqBody>, Response = Response>,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -295,13 +319,14 @@ where
                         inner: Kind::Error {
                             headers: Some(headers),
                             code: StatusCode::TOO_MANY_REQUESTS,
+                            msg: Some("Too Many Requests".to_string()),
                         },
                     }
                 }
             },
 
             // Extraction failed, stop right now.
-            Err(_) => {
+            Err(e) => {
                 // Not sure if I should do this, but not sure how to return an Error
                 // in a match arm like this
                 // future::err(e.into())
@@ -309,6 +334,7 @@ where
                     inner: Kind::Error {
                         headers: None,
                         code: StatusCode::INTERNAL_SERVER_ERROR,
+                        msg: Some(e.to_string()),
                     },
                 }
             }

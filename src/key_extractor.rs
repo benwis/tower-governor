@@ -11,9 +11,9 @@ use std::{hash::Hash, net::IpAddr};
 use tower::BoxError;
 
 /// Generic structure of what is needed to extract a rate-limiting key from an incoming request.
-pub trait KeyExtractor: Clone {
+pub trait KeyExtractor: Clone + Debug {
     /// The type of the key.
-    type Key: Clone + Hash + Eq;
+    type Key: Clone + Hash + Eq + Debug;
 
     /// The type of the error that can occur if key extraction from the request fails.
     // type KeyExtractionError: Error;
@@ -38,6 +38,7 @@ pub trait KeyExtractor: Clone {
     }
 
     #[cfg(feature = "tracing")]
+
     /// Value of the extracted key (only used in tracing).
     fn key_name(&self, _key: &Self::Key) -> Option<String> {
         None
@@ -53,6 +54,7 @@ impl KeyExtractor for GlobalKeyExtractor {
     // type KeyExtractionError = BoxError;
 
     #[cfg(feature = "tracing")]
+
     fn name(&self) -> &'static str {
         "global"
     }
@@ -62,6 +64,7 @@ impl KeyExtractor for GlobalKeyExtractor {
     }
 
     #[cfg(feature = "tracing")]
+
     fn key_name(&self, _key: &Self::Key) -> Option<String> {
         None
     }
@@ -85,6 +88,7 @@ impl KeyExtractor for PeerIpKeyExtractor {
     // type KeyExtractionError = BoxError;
 
     #[cfg(feature = "tracing")]
+
     fn name(&self) -> &'static str {
         "peer IP"
     }
@@ -99,6 +103,7 @@ impl KeyExtractor for PeerIpKeyExtractor {
     }
 
     #[cfg(feature = "tracing")]
+
     fn key_name(&self, key: &Self::Key) -> Option<String> {
         Some(key.to_string())
     }
@@ -119,6 +124,7 @@ impl KeyExtractor for SmartIpKeyExtractor {
     // type KeyExtractionError = BoxError;
 
     #[cfg(feature = "tracing")]
+
     fn name(&self) -> &'static str {
         "smart IP"
     }
@@ -136,6 +142,7 @@ impl KeyExtractor for SmartIpKeyExtractor {
     }
 
     #[cfg(feature = "tracing")]
+
     fn key_name(&self, key: &Self::Key) -> Option<String> {
         Some(key.to_string())
     }
