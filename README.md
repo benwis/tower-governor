@@ -120,9 +120,6 @@ async fn main() {
  # Common pitfalls
 
  1. Do not construct the same configuration multiple times, unless explicitly wanted!
- This will create an independent rate limiter for each configuration!
-
- Instead pass the same configuration reference into [`Governor::new()`],
- like it is described in the example.
+ This will create an independent rate limiter for each configuration! Instead pass the same configuration reference into [`Governor::new()`], like it is described in the example.
 
  2. Be careful to create your server with `.into_make_service_with_connection_info::<SocketAddr>` instead of `.into_make_service()` if you are using the default PeerIpKeyExtractor. Otherwise there will be no peer ip address for Tower to find!
