@@ -33,7 +33,7 @@ pub type SharedRateLimiter<Key, M> =
 /// that replenishes one element every minute.
 ///
 /// ```rust
-/// use axum_governor::governor::GovernorConfigBuilder;
+/// use tower_governor::governor::GovernorConfigBuilder;
 ///
 /// let config = GovernorConfigBuilder::default()
 ///     .per_second(60)
@@ -45,7 +45,7 @@ pub type SharedRateLimiter<Key, M> =
 /// with x-ratelimit headers
 ///
 /// ```rust
-/// use axum_governor::governor::GovernorConfigBuilder;
+/// use tower_governor::governor::GovernorConfigBuilder;
 ///
 /// let config = GovernorConfigBuilder::default()
 ///     .per_second(60)

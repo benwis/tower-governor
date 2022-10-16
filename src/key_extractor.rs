@@ -21,8 +21,8 @@ pub trait KeyExtractor: Clone {
     /// The type of the error that can occur if key extraction from the request fails.
     // type KeyExtractionError: Error;
 
-    #[cfg(feature = "log")]
-    /// Name of this extractor (only used in logs).
+    #[cfg(feature = "tracing")]
+    /// Name of this extractor (only used for tracing).
     fn name(&self) -> &'static str;
 
     /// Extraction method, will return [`KeyExtractionError`] response when the extract failed
@@ -40,8 +40,8 @@ pub trait KeyExtractor: Clone {
         Box::new(SimpleKeyExtractionError::TooManyRequests(wait_time))
     }
 
-    #[cfg(feature = "log")]
-    /// Value of the extracted key (only used in logs).
+    #[cfg(feature = "tracing")]
+    /// Value of the extracted key (only used in tracing).
     fn key_name(&self, _key: &Self::Key) -> Option<String> {
         None
     }
@@ -55,7 +55,7 @@ impl KeyExtractor for GlobalKeyExtractor {
     type Key = ();
     // type KeyExtractionError = BoxError;
 
-    #[cfg(feature = "log")]
+    #[cfg(feature = "tracing")]
     fn name(&self) -> &'static str {
         "global"
     }
@@ -64,7 +64,7 @@ impl KeyExtractor for GlobalKeyExtractor {
         Ok(())
     }
 
-    #[cfg(feature = "log")]
+    #[cfg(feature = "tracing")]
     fn key_name(&self, _key: &Self::Key) -> Option<String> {
         None
     }
@@ -87,7 +87,7 @@ impl KeyExtractor for PeerIpKeyExtractor {
     type Key = IpAddr;
     // type KeyExtractionError = BoxError;
 
-    #[cfg(feature = "log")]
+    #[cfg(feature = "tracing")]
     fn name(&self) -> &'static str {
         "peer IP"
     }
@@ -105,7 +105,7 @@ impl KeyExtractor for PeerIpKeyExtractor {
         //     .ok_or_else(|| SimpleKeyExtractionError::UnableToExtractKey)
     }
 
-    #[cfg(feature = "log")]
+    #[cfg(feature = "tracing")]
     fn key_name(&self, key: &Self::Key) -> Option<String> {
         Some(key.to_string())
     }
@@ -127,7 +127,7 @@ impl KeyExtractor for SmartIpKeyExtractor {
     type Key = IpAddr;
     // type KeyExtractionError = BoxError;
 
-    #[cfg(feature = "log")]
+    #[cfg(feature = "tracing")]
     fn name(&self) -> &'static str {
         "smart IP"
     }
@@ -144,7 +144,7 @@ impl KeyExtractor for SmartIpKeyExtractor {
             .ok_or_else(|| -> BoxError { Box::new(SimpleKeyExtractionError::UnableToExtractKey) })
     }
 
-    #[cfg(feature = "log")]
+    #[cfg(feature = "tracing")]
     fn key_name(&self, key: &Self::Key) -> Option<String> {
         Some(key.to_string())
     }
@@ -157,7 +157,7 @@ impl KeyExtractor for SmartIpKeyExtractor {
 const X_REAL_IP: &str = "x-real-ip";
 const X_FORWARDED_FOR: &str = "x-forwarded-for";
 
-/// Tries to parse the `x-real-ip` header
+/// Tries to parse the `x-forwarded-for` header
 fn maybe_x_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
     headers
         .get(X_FORWARDED_FOR)

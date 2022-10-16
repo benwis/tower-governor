@@ -51,16 +51,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axum-client-ip"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92ba6eab8967a7b1121e3cd7491a205dff7a33bb05e65df6c199d687a32e4d3b"
-dependencies = [
- "axum",
- "forwarded-header-value",
-]
-
-[[package]]
 name = "axum-core"
 version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -74,38 +64,6 @@ dependencies = [
  "mime",
  "tower-layer",
  "tower-service",
-]
-
-[[package]]
-name = "axum_governor"
-version = "0.1.0"
-dependencies = [
- "axum",
- "axum-client-ip",
- "backoff",
- "forwarded-header-value",
- "futures",
- "futures-core",
- "governor",
- "http",
- "pin-project",
- "redis_rs",
- "thiserror",
- "tokio 0.2.25",
- "tower",
- "tower-layer",
- "tracing",
-]
-
-[[package]]
-name = "backoff"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b62ddb9cb1ec0a098ad4bbf9344d0713fa193ae1a80af55febcff2627b6a00c1"
-dependencies = [
- "getrandom",
- "instant",
- "rand",
 ]
 
 [[package]]
@@ -407,15 +365,6 @@ dependencies = [
  "tower-service",
  "tracing",
  "want",
-]
-
-[[package]]
-name = "instant"
-version = "0.1.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
-dependencies = [
- "cfg-if 1.0.0",
 ]
 
 [[package]]
@@ -777,12 +726,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "redis_rs"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44e5387dc28a58b9bc0a51acf7838610f459dea43335f9bc1f198882ff633304"
-
-[[package]]
 name = "redox_syscall"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -998,6 +941,24 @@ name = "tower-service"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6bc1c9ce2b5135ac7f93c72918fc37feb872bdc6a5533a8b85eb4b86bfdae52"
+
+[[package]]
+name = "tower_governor"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "forwarded-header-value",
+ "futures",
+ "futures-core",
+ "governor",
+ "http",
+ "pin-project",
+ "thiserror",
+ "tokio 0.2.25",
+ "tower",
+ "tower-layer",
+ "tracing",
+]
 
 [[package]]
 name = "tracing"

@@ -1,5 +1,5 @@
 [package]
-name = "axum_governor"
+name = "tower_governor"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,17 +7,18 @@ edition = "2021"
 
 [dependencies]
 axum = "0.5.16"
-axum-client-ip = "0.2.0"
-backoff = "0.4.0"
 forwarded-header-value = "0.1.1"
 futures = "0.3.24"
 futures-core = "0.3.24"
 governor = "0.5.0"
 http = "0.2.8"
 pin-project = "1.0.12"
-redis_rs = "0.9.0"
 thiserror = "1.0.37"
 tokio = { version = "0.2.22", features = ["full"] }
 tower = "0.4.13"
 tower-layer = "0.3.1"
 tracing = "0.1.37"
+
+[features]
+# Enables tracing output for this middleware
+tracing = []
