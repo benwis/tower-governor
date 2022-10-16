@@ -16,6 +16,7 @@ path = "src/basic.rs"
 axum = "0.5.16"
 axum_governor={path="../"}
 tokio = { version = "1.21.2", features = ["full"] }
+tracing = "0.1.37"
 
 
 

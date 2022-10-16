@@ -16,6 +16,15 @@ pub const DEFAULT_BURST_SIZE: u32 = 8;
 pub type SharedRateLimiter<Key, M> =
     Arc<RateLimiter<Key, DefaultKeyedStateStore<Key>, DefaultClock, M>>;
 
+// #[derive(Debug)]
+// pub struct WrappedNoOpMiddleware(NoOpMiddleware<QuantaInstant>);
+
+// impl Clone for WrappedNoOpMiddleware {
+//     fn clone(&self) -> Self {
+//         Self(self.0.clone())
+//     }
+// }
+
 /// Helper struct for building a configuration for the governor middleware.
 ///
 /// # Example
@@ -254,12 +263,25 @@ impl<M: RateLimitingMiddleware<QuantaInstant>> GovernorConfig<PeerIpKeyExtractor
 
 /// Governor middleware factory. Hand this a GovernorConfig and it'll create this struct, which
 /// contains everything needed to implement a middleware
-#[derive(Debug, Clone)]
+/// https://stegosaurusdormant.com/understanding-derive-clone/
+#[derive(Debug)]
 pub struct Governor<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S> {
     pub key_extractor: K,
     pub limiter: SharedRateLimiter<K::Key, M>,
     pub methods: Option<Vec<Method>>,
     pub inner: S,
+}
+impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S: Clone> Clone
+    for Governor<K, M, S>
+{
+    fn clone(&self) -> Self {
+        Self {
+            key_extractor: self.key_extractor.clone(),
+            limiter: self.limiter.clone(),
+            methods: self.methods.clone(),
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S> Governor<K, M, S> {

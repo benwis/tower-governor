@@ -173,6 +173,7 @@ dependencies = [
  "axum",
  "axum_governor",
  "tokio 1.21.2",
+ "tracing",
 ]
 
 [[package]]

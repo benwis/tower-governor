@@ -152,7 +152,7 @@ where
     K: KeyExtractor,
     M: RateLimitingMiddleware<QuantaInstant>,
 {
-    config: GovernorConfig<K, M>,
+    pub config: GovernorConfig<K, M>,
 }
 
 impl<K, M, S> Layer<S> for GovernorLayer<K, M>
@@ -298,8 +298,10 @@ where
     type Output = Result<Response<B>, E>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        println!("POLLING RESPONSE FUTURE");
         match self.project().inner.project() {
             KindProj::Passthrough { future } => {
+                println!("Passthrough!");
                 let response: Response<B> = ready!(future.poll(cx))?;
                 Poll::Ready(Ok(response))
             }
@@ -308,6 +310,7 @@ where
                 burst_size,
                 remaining_burst_capacity,
             } => {
+                println!("RateLimit!");
                 let mut response: Response<B> = ready!(future.poll(cx))?;
 
                 let mut headers = HeaderMap::new();
@@ -324,6 +327,7 @@ where
                 Poll::Ready(Ok(response))
             }
             KindProj::WhitelistedHeader { future } => {
+                println!("WhiteList!");
                 let mut response: Response<B> = ready!(future.poll(cx))?;
 
                 let headers = response.headers_mut();
@@ -335,6 +339,7 @@ where
                 Poll::Ready(Ok(response))
             }
             KindProj::Error { code, headers } => {
+                println!("Error!");
                 let mut response = Response::new(B::default());
 
                 // Let's build the an error response here!
