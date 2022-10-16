@@ -21,6 +21,7 @@ use std::task::{Context, Poll};
 use std::{future::Future, pin::Pin};
 use tower::{Layer, Service};
 
+/// The Layer type that implements tower::Layer and is passed into `.layer()`
 #[derive(Clone)]
 pub struct GovernorLayer<'a, K, M>
 where
@@ -42,7 +43,7 @@ where
     }
 }
 
-// Implement Service for Governor
+// Implement tower::Service for Governor
 impl<K, S, ReqBody, ResBody> Service<Request<ReqBody>> for Governor<K, NoOpMiddleware, S>
 where
     K: KeyExtractor,
@@ -217,7 +218,7 @@ where
     }
 }
 
-// Implementation of Service for StateInformationMiddleware. You can have more than one!
+// Implementation of Service for Governor using the StateInformationMiddleware.
 impl<K, S, ReqBody, ResBody> Service<Request<ReqBody>>
     for Governor<K, StateInformationMiddleware, S>
 where

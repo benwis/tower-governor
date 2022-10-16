@@ -1,7 +1,9 @@
- A Tower service and layer that provides a rate-limiting backed by [governor](https://github.com/antifuchs/governor) and based heavily on [actix-governor](https://github.com/AaronErhardt/actix-governor).
+ A Tower service and layer that provides a rate-limiting backed by [governor](https://github.com/antifuchs/governor). Based heavily on the work done for [actix-governor](https://github.com/AaronErhardt/actix-governor). Works with Axum, Hyper, Tower, Tonic, and anything else based on Tower!
 
  # Features:
 
+ + Rate limit requests based on peer IP address, IP address headers, globally, or via custom keys
+ + Custom traffic limiting criteria per second, or to certain bursts
  + Simple to use
  + High customizability
  + High performance
@@ -103,17 +105,11 @@ async fn main() {
  This is achieved by defining a [KeyExtractor] and giving it to a [Governor] instance.
  Three ready-to-use key extractors are provided:
  - [PeerIpKeyExtractor]: this is the default
- - [SmartIpKeyExtractor]: Looks for standard IP identification headers in order(x-forwarded-for,x-real-ip, forwarded) and falls back to the Peer IP
+ - [SmartIpKeyExtractor]: Looks for common IP identification headers usually provided by CDNs and reverse proxies in order(x-forwarded-for,x-real-ip, forwarded) and falls back to the peer IP address.
  - [GlobalKeyExtractor]: uses the same key for all incoming requests
 
- Check out the [custom_key](https://github.com/AaronErhardt/axum-governor/blob/main/examples/custom_key.rs) example to see how a custom key extractor can be implemented.
-
-
  Check out the [custom_key_bearer] example for more information.
-
- [`HttpResponseBuilder`]: axum_web::HttpResponseBuilder
- [`HttpResponse`]: axum_web::HttpResponse
- [custom_key_bearer]: https://github.com/AaronErhardt/axum-governor/blob/main/examples/custom_key_bearer.rs
+ [custom_key_bearer]: https://github.com/benwis/tower-governor/blob/main/examples/src/custom_key_bearer.rs
 
  # Add x-ratelimit headers
 
@@ -123,8 +119,10 @@ async fn main() {
 
  # Common pitfalls
 
- Do not construct the same configuration multiple times, unless explicitly wanted!
+ 1. Do not construct the same configuration multiple times, unless explicitly wanted!
  This will create an independent rate limiter for each configuration!
 
  Instead pass the same configuration reference into [`Governor::new()`],
  like it is described in the example.
+
+ 2. Be careful to create your server with `.into_make_service_with_connection_info::<SocketAddr>` instead of `.into_make_service()` if you are using the default PeerIpKeyExtractor. Otherwise there will be no peer ip address for Tower to find!

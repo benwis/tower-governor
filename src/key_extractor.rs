@@ -1,13 +1,10 @@
-// use actix_http::StatusCode;
-use http::request::Request;
-use http::{header::FORWARDED, HeaderMap};
-// use actix_web::{dev::Request, http::header::ContentType};
-// use actix_web::{Response, ResponseBuilder, ResponseError};
 use crate::errors::SimpleKeyExtractionError;
 use axum::extract::ConnectInfo;
 use forwarded_header_value::{ForwardedHeaderValue, Identifier};
 use governor::clock::{Clock, DefaultClock, QuantaInstant};
 use governor::NotUntil;
+use http::request::Request;
+use http::{header::FORWARDED, HeaderMap};
 use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::{hash::Hash, net::IpAddr};
@@ -99,10 +96,6 @@ impl KeyExtractor for PeerIpKeyExtractor {
             .get::<ConnectInfo<SocketAddr>>()
             .map(|ConnectInfo(addr)| addr.ip())
             .ok_or_else(|| -> BoxError { Box::new(SimpleKeyExtractionError::UnableToExtractKey) })
-
-        // req.peer_addr()
-        //     .map(|socket| socket.ip())
-        //     .ok_or_else(|| SimpleKeyExtractionError::UnableToExtractKey)
     }
 
     #[cfg(feature = "tracing")]
@@ -110,16 +103,14 @@ impl KeyExtractor for PeerIpKeyExtractor {
         Some(key.to_string())
     }
 }
-/// A [KeyExtractor] that uses peer IP as key. **This is the default key extractor and [it may no do want you want](PeerIpKeyExtractor).**
+
+/// A [KeyExtractor] that tries to get the client IP address from the x-forwarded-for, x-real-ip, and forwarded headers in that order. Falls back to the peer IP address.
 ///
-/// **Warning:** this key extractor enforces rate limiting based on the **_peer_ IP address**.
+/// **Warning:** Only use this key extractor if you can ensure these headers are being set by a trusted provider.**.
 ///
-/// This means that if your app is deployed behind a reverse proxy, the peer IP address will _always_ be the proxy's IP address.
-/// In this case, rate limiting will be applied to _all_ incoming requests as if they were from the same user.
-///
-/// If this is not the behavior you want, you may:
-/// - implement your own [KeyExtractor] that tries to get IP from the `Forwarded` or `X-Forwarded-For` headers that most reverse proxies set
-/// - make absolutely sure that you only trust these headers when the peer IP is the IP of your reverse proxy (otherwise any user could set them to fake its IP)
+/// This is a sane default for an app running behind a reverse proxy, with the caveat that one must be careful of ths source of the headers.
+/// It will fall back to the peer IP address if the headers are not present, which would set a global rate limit if behind a reverse proxy.
+/// If it fails to find any of the headers or the peer IP, it will error out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SmartIpKeyExtractor;
 
