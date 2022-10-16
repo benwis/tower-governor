@@ -57,12 +57,12 @@ async fn main() {
         // `GET /` goes to `root`
         .route("/", get(hello))
         .layer(GovernorLayer {
-            config: governor_conf,
+            config: &governor_conf,
         });
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
+    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     tracing::debug!("listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service_with_connect_info::<SocketAddr>())
