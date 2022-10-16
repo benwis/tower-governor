@@ -13,7 +13,6 @@ impl KeyExtractor for UserToken {
     type KeyExtractionError = SimpleKeyExtractionError<&'static str>;
 
     #[cfg(feature = "tracing")]
-
     fn name(&self) -> &'static str {
         "Bearer token"
     }
@@ -50,7 +49,6 @@ impl KeyExtractor for UserToken {
     }
 
     #[cfg(feature = "tracing")]
-
     fn key_name(&self, key: &Self::Key) -> Option<String> {
         Some("String".to_owned())
     }

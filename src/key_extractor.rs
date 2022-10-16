@@ -38,7 +38,6 @@ pub trait KeyExtractor: Clone + Debug {
     }
 
     #[cfg(feature = "tracing")]
-
     /// Value of the extracted key (only used in tracing).
     fn key_name(&self, _key: &Self::Key) -> Option<String> {
         None
@@ -54,7 +53,6 @@ impl KeyExtractor for GlobalKeyExtractor {
     // type KeyExtractionError = BoxError;
 
     #[cfg(feature = "tracing")]
-
     fn name(&self) -> &'static str {
         "global"
     }
@@ -64,7 +62,6 @@ impl KeyExtractor for GlobalKeyExtractor {
     }
 
     #[cfg(feature = "tracing")]
-
     fn key_name(&self, _key: &Self::Key) -> Option<String> {
         None
     }
@@ -88,7 +85,6 @@ impl KeyExtractor for PeerIpKeyExtractor {
     // type KeyExtractionError = BoxError;
 
     #[cfg(feature = "tracing")]
-
     fn name(&self) -> &'static str {
         "peer IP"
     }
@@ -103,7 +99,6 @@ impl KeyExtractor for PeerIpKeyExtractor {
     }
 
     #[cfg(feature = "tracing")]
-
     fn key_name(&self, key: &Self::Key) -> Option<String> {
         Some(key.to_string())
     }
@@ -124,7 +119,6 @@ impl KeyExtractor for SmartIpKeyExtractor {
     // type KeyExtractionError = BoxError;
 
     #[cfg(feature = "tracing")]
-
     fn name(&self) -> &'static str {
         "smart IP"
     }
@@ -142,7 +136,6 @@ impl KeyExtractor for SmartIpKeyExtractor {
     }
 
     #[cfg(feature = "tracing")]
-
     fn key_name(&self, key: &Self::Key) -> Option<String> {
         Some(key.to_string())
     }

@@ -10,7 +10,6 @@ use crate::governor::{Governor, GovernorConfig};
 use ::governor::clock::{Clock, DefaultClock, QuantaInstant};
 use ::governor::middleware::{NoOpMiddleware, RateLimitingMiddleware, StateInformationMiddleware};
 use axum::response::{IntoResponse, Response};
-use futures::future::Either;
 use futures_core::ready;
 
 use http::header::{HeaderName, HeaderValue};
