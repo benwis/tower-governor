@@ -130,7 +130,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "tokio 1.21.2",
- "tower_governor",
+ "tower-governor",
  "tracing",
  "tracing-subscriber",
 ]
@@ -974,6 +974,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "tower-governor"
+version = "0.0.1-beta.0"
+dependencies = [
+ "axum",
+ "forwarded-header-value",
+ "futures",
+ "futures-core",
+ "governor",
+ "http",
+ "pin-project",
+ "thiserror",
+ "tokio 0.2.25",
+ "tower",
+ "tower-layer",
+ "tracing",
+]
+
+[[package]]
 name = "tower-http"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1003,24 +1021,6 @@ name = "tower-service"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6bc1c9ce2b5135ac7f93c72918fc37feb872bdc6a5533a8b85eb4b86bfdae52"
-
-[[package]]
-name = "tower_governor"
-version = "0.1.0"
-dependencies = [
- "axum",
- "forwarded-header-value",
- "futures",
- "futures-core",
- "governor",
- "http",
- "pin-project",
- "thiserror",
- "tokio 0.2.25",
- "tower",
- "tower-layer",
- "tracing",
-]
 
 [[package]]
 name = "tracing"

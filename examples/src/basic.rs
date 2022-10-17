@@ -1,5 +1,5 @@
 use axum::{routing::get, Router};
-use tower-governor::{
+use tower_governor::{
     governor::{GovernorConfigBuilder},
     GovernorLayer,
 };
