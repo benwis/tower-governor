@@ -1,11 +1,11 @@
 [package]
-name = "tower-governor"
+name = "tower_governor"
 authors = ["Ben Wishovich <ben@benw.is>"]
 description = "A rate-limiting middleware for Tower backed by the governor crate that allows configurable key based and global limits"
 repository = "https://github.com/benwis/tower-governor"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-version = "0.0.1-beta.0"
+version = "0.0.1-alpha.0"
 edition = "2021"
 keywords = ["axum", "tower", "tonic", "rate-limit", "governor"]
 categories = ["web-programming::http-server"]
