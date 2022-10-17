@@ -1,8 +1,9 @@
-use axum::{routing::get, Router};
+use axum::{routing::get, Router, error_handling::HandleErrorLayer,http::StatusCode, BoxError};
 use tower_governor::{
     governor::{GovernorConfigBuilder},
     GovernorLayer,
 };
+use tower::{ServiceBuilder};
 use std::net::SocketAddr;
 
 async fn hello() -> &'static str {
@@ -29,9 +30,18 @@ async fn main() {
     let app = Router::new()
         // `GET /` goes to `root`
         .route("/", get(hello))
-        .layer(GovernorLayer {
-            config: &governor_conf,
-        });
+        .layer(
+            ServiceBuilder::new()
+                // this middleware goes above `GovernorLayer` because it will receive
+                // errors returned by `GovernorLayer`
+                .layer(HandleErrorLayer::new(|_: BoxError| async {
+                    StatusCode::TOO_MANY_REQUESTS
+                }))
+                .layer(GovernorLayer {
+                    config: &governor_conf,
+                })
+        );
+        
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`

@@ -33,12 +33,12 @@
 
  # Example
  ```rust,no_run
- use axum::{routing::get, Router};
+use axum::{routing::get, Router, error_handling::HandleErrorLayer,http::StatusCode, BoxError};
 use tower_governor::{
-    governor::{Governor, GovernorConfigBuilder},
+    governor::{GovernorConfigBuilder},
     GovernorLayer,
 };
-// use axum_web::{web, App, HttpServer, Responder};
+use tower::{ServiceBuilder};
 use std::net::SocketAddr;
 
 async fn hello() -> &'static str {
@@ -47,6 +47,13 @@ async fn hello() -> &'static str {
 
 #[tokio::main]
 async fn main() {
+
+    // Configure tracing if desired
+    // construct a subscriber that prints formatted traces to stdout
+    let subscriber = tracing_subscriber::FmtSubscriber::new();
+    // use that subscriber to process traces emitted after this point
+    tracing::subscriber::set_global_default(subscriber).unwrap();
+
     // Allow bursts with up to five requests per IP address
     // and replenishes one element every two seconds
     let governor_conf = GovernorConfigBuilder::default()
@@ -58,9 +65,18 @@ async fn main() {
     let app = Router::new()
         // `GET /` goes to `root`
         .route("/", get(hello))
-        .layer(GovernorLayer {
-            config: &governor_conf,
-        });
+        .layer(
+            ServiceBuilder::new()
+                // this middleware goes above `GovernorLayer` because it will receive
+                // errors returned by `GovernorLayer`
+                .layer(HandleErrorLayer::new(|_: BoxError| async {
+                    StatusCode::TOO_MANY_REQUESTS
+                }))
+                .layer(GovernorLayer {
+                    config: &governor_conf,
+                })
+        );
+        
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
@@ -77,10 +93,10 @@ async fn main() {
 
  Instead of using the configuration builder you can use predefined presets.
 
- + [`GovernorConfig::default()`]: The default configuration which is suitable for most services.
+ + [`GovernorConfig::default()`](): The default configuration which is suitable for most services.
  Allows bursts with up to eight requests and replenishes one element after 500ms, based on peer IP.
 
- + [`GovernorConfig::secure()`]: A default configuration for security related services.
+ + [`GovernorConfig::secure()`](): A default configuration for security related services.
  Allows bursts with up to two requests and replenishes one element after four seconds, based on peer IP.
 
  For example the secure configuration can be used as a short version of this code:

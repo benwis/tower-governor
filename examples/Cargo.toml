@@ -18,10 +18,11 @@ path = "src/custom_key_bearer.rs"
 
 [dependencies]
 axum = "0.5.16"
-tower-governor={path="../", features=["tracing"]}
+tower_governor={path="../", features=["tracing"]}
 tokio = { version = "1.21.2", features = ["full"] }
 tracing = {version="0.1.37", features=["attributes"]}
 tracing-subscriber = "0.3"
+tower = "0.4.13"
 
 
 

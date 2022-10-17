@@ -1,14 +1,11 @@
-use crate::errors::SimpleKeyExtractionError;
+use crate::errors::GovernorError;
 use axum::extract::ConnectInfo;
 use forwarded_header_value::{ForwardedHeaderValue, Identifier};
-use governor::clock::{Clock, DefaultClock, QuantaInstant};
-use governor::NotUntil;
 use http::request::Request;
 use http::{header::FORWARDED, HeaderMap};
 use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::{hash::Hash, net::IpAddr};
-use tower::BoxError;
 
 /// Generic structure of what is needed to extract a rate-limiting key from an incoming request.
 pub trait KeyExtractor: Clone + Debug {
@@ -25,17 +22,20 @@ pub trait KeyExtractor: Clone + Debug {
     /// Extraction method, will return [`KeyExtractionError`] response when the extract failed
     ///
     /// [`KeyExtractionError`]: KeyExtractor::KeyExtractionError
-    fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, BoxError>;
+    fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, GovernorError>;
 
-    /// The content you want to show it when the rate limit is exceeded.
-    /// You can calculate the time at which a caller can expect the next positive rate-limiting result by using [`NotUntil`].
-    /// The [`ResponseBuilder`] allows you to build a fully customized [`Response`] in case of an error.
-    fn exceed_rate_limit_response(&self, negative: &NotUntil<QuantaInstant>) -> BoxError {
-        let wait_time = negative
-            .wait_time_from(DefaultClock::default().now())
-            .as_secs();
-        Box::new(SimpleKeyExtractionError::TooManyRequests(wait_time))
-    }
+    // /// The content you want to show it when the rate limit is exceeded.
+    // /// You can calculate the time at which a caller can expect the next positive rate-limiting result by using [`NotUntil`].
+    // /// The [`ResponseBuilder`] allows you to build a fully customized [`Response`] in case of an error.
+    // fn exceed_rate_limit_response(&self, negative: &NotUntil<QuantaInstant>) -> BoxError {
+    //     let wait_time = negative
+    //         .wait_time_from(DefaultClock::default().now())
+    //         .as_secs();
+    //     Box::new(GovernorError::TooManyRequests {
+    //         wait_time,
+    //         headers: None,
+    //     })
+    // }
 
     #[cfg(feature = "tracing")]
     /// Value of the extracted key (only used in tracing).
@@ -57,7 +57,7 @@ impl KeyExtractor for GlobalKeyExtractor {
         "global"
     }
 
-    fn extract<T>(&self, _req: &Request<T>) -> Result<Self::Key, BoxError> {
+    fn extract<T>(&self, _req: &Request<T>) -> Result<Self::Key, GovernorError> {
         Ok(())
     }
 
@@ -91,11 +91,11 @@ impl KeyExtractor for PeerIpKeyExtractor {
 
     //type Key: Clone + Hash + Eq;
     //type Boxerror:  pub type BoxError = Box<dyn Error + Send + Sync>;
-    fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, BoxError> {
+    fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, GovernorError> {
         req.extensions()
             .get::<ConnectInfo<SocketAddr>>()
             .map(|ConnectInfo(addr)| addr.ip())
-            .ok_or_else(|| -> BoxError { Box::new(SimpleKeyExtractionError::UnableToExtractKey) })
+            .ok_or(GovernorError::UnableToExtractKey)
     }
 
     #[cfg(feature = "tracing")]
@@ -125,14 +125,14 @@ impl KeyExtractor for SmartIpKeyExtractor {
 
     //type Key: Clone + Hash + Eq;
     //type Boxerror:  pub type BoxError = Box<dyn Error + Send + Sync>;
-    fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, BoxError> {
+    fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, GovernorError> {
         let headers = req.headers();
 
         maybe_x_forwarded_for(headers)
             .or_else(|| maybe_x_real_ip(headers))
             .or_else(|| maybe_forwarded(headers))
             .or_else(|| maybe_connect_info(req))
-            .ok_or_else(|| -> BoxError { Box::new(SimpleKeyExtractionError::UnableToExtractKey) })
+            .ok_or(GovernorError::UnableToExtractKey)
     }
 
     #[cfg(feature = "tracing")]

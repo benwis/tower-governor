@@ -9,17 +9,18 @@ pub mod key_extractor;
 use crate::governor::{Governor, GovernorConfig};
 use ::governor::clock::{Clock, DefaultClock, QuantaInstant};
 use ::governor::middleware::{NoOpMiddleware, RateLimitingMiddleware, StateInformationMiddleware};
-use axum::response::{IntoResponse, Response};
+use errors::GovernorError;
 use futures_core::ready;
+use http::response::Response;
 
 use http::header::{HeaderName, HeaderValue};
 use http::request::Request;
-use http::{HeaderMap, StatusCode};
+use http::HeaderMap;
 use key_extractor::KeyExtractor;
 use pin_project::pin_project;
 use std::task::{Context, Poll};
 use std::{future::Future, pin::Pin};
-use tower::{Layer, Service};
+use tower::{BoxError, Layer, Service};
 
 /// The Layer type that implements tower::Layer and is passed into `.layer()`
 #[derive(Clone)]
@@ -44,19 +45,21 @@ where
 }
 
 // Implement tower::Service for Governor
-impl<K, S, ReqBody> Service<Request<ReqBody>> for Governor<K, NoOpMiddleware, S>
+impl<K, S, ReqBody, ResBody> Service<Request<ReqBody>> for Governor<K, NoOpMiddleware, S>
 where
     K: KeyExtractor,
-    S: Service<Request<ReqBody>, Response = Response>,
+    S: Service<Request<ReqBody>, Response = Response<ResBody>>,
+    S::Error: Into<BoxError>,
 {
     type Response = S::Response;
-    type Error = S::Error;
+    type Error = BoxError;
     type Future = ResponseFuture<S::Future>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        // Our middleware doesn't care about backpressure so its ready as long
-        // as the inner service is ready.
-        self.inner.poll_ready(cx)
+        match self.inner.poll_ready(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(r) => Poll::Ready(r.map_err(Into::into)),
+        }
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
@@ -103,26 +106,22 @@ where
 
                     ResponseFuture {
                         inner: Kind::Error {
-                            code: StatusCode::TOO_MANY_REQUESTS,
-                            headers: Some(headers),
-                            msg: Some("Too Many Requests!".to_string()),
+                            gov_error: GovernorError::TooManyRequests {
+                                wait_time,
+                                headers: Some(headers),
+                            },
                         },
                     }
                 }
             },
 
-            Err(e) => {
-                // Not sure if I should do this, but not sure how to return an Error
-                // in a match arm like this
-                // future::err(e.into())
-                ResponseFuture {
-                    inner: Kind::Error {
-                        headers: None,
-                        code: StatusCode::INTERNAL_SERVER_ERROR,
-                        msg: Some(e.to_string()),
+            Err(e) => ResponseFuture {
+                inner: Kind::Error {
+                    gov_error: GovernorError::Other {
+                        name: e.to_string(),
                     },
-                }
-            }
+                },
+            },
         }
     }
 }
@@ -154,27 +153,22 @@ enum Kind<F> {
         #[pin]
         future: F,
     },
-    // Error {
-    //     code: StatusCode,
-    //     headers: Option<HeaderMap>,
-    // },
     Error {
-        code: StatusCode,
-        headers: Option<HeaderMap>,
-        msg: Option<String>,
+        gov_error: GovernorError,
     },
 }
 
-impl<F, E> Future for ResponseFuture<F>
+impl<F, B, Error> Future for ResponseFuture<F>
 where
-    F: Future<Output = Result<Response, E>>,
+    F: Future<Output = Result<Response<B>, Error>>,
+    Error: Into<BoxError>,
 {
-    type Output = Result<Response, E>;
+    type Output = Result<Response<B>, BoxError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project().inner.project() {
             KindProj::Passthrough { future } => {
-                let response: Response = ready!(future.poll(cx))?;
+                let response = ready!(future.poll(cx).map_err(Into::into))?;
                 Poll::Ready(Ok(response))
             }
             KindProj::RateLimitHeader {
@@ -182,7 +176,7 @@ where
                 burst_size,
                 remaining_burst_capacity,
             } => {
-                let mut response = ready!(future.poll(cx))?;
+                let mut response = ready!(future.poll(cx).map_err(Into::into))?;
 
                 let mut headers = HeaderMap::new();
                 headers.insert(
@@ -198,7 +192,7 @@ where
                 Poll::Ready(Ok(response))
             }
             KindProj::WhitelistedHeader { future } => {
-                let mut response = ready!(future.poll(cx))?;
+                let mut response = ready!(future.poll(cx).map_err(Into::into))?;
 
                 let headers = response.headers_mut();
                 headers.insert(
@@ -208,56 +202,27 @@ where
 
                 Poll::Ready(Ok(response))
             }
-            // KindProj::Error { code, headers } => {
-            //     let mut response = Response::new();
-
-            //     // Let's build the an error response here!
-            //     *response.status_mut() = *code;
-            //     if let Some(headers) = headers {
-            //         response.headers_mut().extend(headers.drain());
-            //     }
-
-            //     Poll::Ready(Ok(response))
-            // }
-            KindProj::Error { code, headers, msg } => {
-                let mut response = Response::builder().status(*code);
-
-                let headers = match headers {
-                    Some(h) => h.clone(),
-                    None => HeaderMap::new(),
-                };
-                // No way to panic since we just created the response above
-                for (key, value) in headers.iter() {
-                    response.headers_mut().unwrap().insert(key, value.clone());
-                }
-                let res;
-                if let Some(msg) = msg {
-                    res = response.body(msg.to_owned()).unwrap();
-                } else {
-                    res = response.body("".to_string()).unwrap();
-                }
-
-                Poll::Ready(Ok(res.into_response()))
-            }
+            KindProj::Error { gov_error } => Poll::Ready(Err(Box::new(gov_error.to_owned()))),
         }
     }
 }
 
 // Implementation of Service for Governor using the StateInformationMiddleware.
-impl<K, S, ReqBody> Service<Request<ReqBody>> for Governor<K, StateInformationMiddleware, S>
+impl<K, S, ReqBody, ResBody> Service<Request<ReqBody>>
+    for Governor<K, StateInformationMiddleware, S>
 where
     K: KeyExtractor,
-    S: Service<Request<ReqBody>, Response = Response>,
+    S: Service<Request<ReqBody>, Response = Response<ResBody>>,
+    S::Error: Into<BoxError>,
 {
     type Response = S::Response;
-    type Error = S::Error;
-    // type Future = WhitelistedHeaderFut<S::Future>;
+    type Error = BoxError;
     type Future = ResponseFuture<S::Future>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         // Our middleware doesn't care about backpressure so its ready as long
         // as the inner service is ready.
-        self.inner.poll_ready(cx)
+        self.inner.poll_ready(cx).map_err(Into::into)
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
@@ -311,14 +276,13 @@ where
                         negative.quota().burst_size().get().into(),
                     );
                     headers.insert("x-ratelimit-remaining", 0.into());
-                    // let response = self
-                    //     .key_extractor
-                    //     .exceed_rate_limit_response(&negative, response_builder);
+
                     ResponseFuture {
                         inner: Kind::Error {
-                            headers: Some(headers),
-                            code: StatusCode::TOO_MANY_REQUESTS,
-                            msg: Some("Too Many Requests".to_string()),
+                            gov_error: GovernorError::TooManyRequests {
+                                wait_time,
+                                headers: Some(headers),
+                            },
                         },
                     }
                 }
@@ -328,12 +292,12 @@ where
             Err(e) => {
                 // Not sure if I should do this, but not sure how to return an Error
                 // in a match arm like this
-                // future::err(e.into())
+                // Either::Right(e.into())
                 ResponseFuture {
                     inner: Kind::Error {
-                        headers: None,
-                        code: StatusCode::INTERNAL_SERVER_ERROR,
-                        msg: Some(e.to_string()),
+                        gov_error: GovernorError::Other {
+                            name: e.to_string(),
+                        },
                     },
                 }
             }
