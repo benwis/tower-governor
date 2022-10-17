@@ -1,4 +1,4 @@
-use tokio_governor::governor::{Governor, GovernorConfigBuilder, KeyExtractor, SimpleKeyExtractionError};
+use tokio-governor::governor::{Governor, GovernorConfigBuilder, KeyExtractor, SimpleKeyExtractionError};
 use http::StatusCode;
 use axum::{routing::get, Router};
 use std::net::SocketAddr;

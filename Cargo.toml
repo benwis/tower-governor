@@ -1,5 +1,5 @@
 [package]
-name = "tower_governor"
+name = "tower-governor"
 authors = ["Ben Wishovich <ben@benw.is>"]
 description = "A rate-limiting middleware for Tower backed by the governor crate that allows configurable key based and global limits"
 repository = "https://github.com/benwis/tower-governor"
