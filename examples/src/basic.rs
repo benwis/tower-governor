@@ -1,6 +1,7 @@
-use axum::{routing::get, Router, error_handling::HandleErrorLayer,http::StatusCode, BoxError};
+use axum::{routing::get, Router, error_handling::HandleErrorLayer, BoxError};
 use tower_governor::{
     governor::{GovernorConfigBuilder},
+    errors::{display_error},
     GovernorLayer,
 };
 use tower::{ServiceBuilder};
@@ -34,8 +35,8 @@ async fn main() {
             ServiceBuilder::new()
                 // this middleware goes above `GovernorLayer` because it will receive
                 // errors returned by `GovernorLayer`
-                .layer(HandleErrorLayer::new(|_: BoxError| async {
-                    StatusCode::TOO_MANY_REQUESTS
+                .layer(HandleErrorLayer::new(|e: BoxError| async move {
+                    display_error(e)
                 }))
                 .layer(GovernorLayer {
                     config: &governor_conf,

@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests;
 
-mod errors;
+pub mod errors;
 pub mod governor;
 pub mod key_extractor;
 use crate::governor::{Governor, GovernorConfig};
@@ -116,11 +116,7 @@ where
             },
 
             Err(e) => ResponseFuture {
-                inner: Kind::Error {
-                    gov_error: GovernorError::Other {
-                        name: e.to_string(),
-                    },
-                },
+                inner: Kind::Error { gov_error: e },
             },
         }
     }
@@ -294,11 +290,7 @@ where
                 // in a match arm like this
                 // Either::Right(e.into())
                 ResponseFuture {
-                    inner: Kind::Error {
-                        gov_error: GovernorError::Other {
-                            name: e.to_string(),
-                        },
-                    },
+                    inner: Kind::Error { gov_error: e },
                 }
             }
         }

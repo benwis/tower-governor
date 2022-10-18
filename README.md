@@ -33,9 +33,10 @@
 
  # Example
  ```rust,no_run
-use axum::{routing::get, Router, error_handling::HandleErrorLayer,http::StatusCode, BoxError};
+use axum::{routing::get, Router, error_handling::HandleErrorLayer, BoxError};
 use tower_governor::{
     governor::{GovernorConfigBuilder},
+    errors::{display_error},
     GovernorLayer,
 };
 use tower::{ServiceBuilder};
@@ -69,8 +70,8 @@ async fn main() {
             ServiceBuilder::new()
                 // this middleware goes above `GovernorLayer` because it will receive
                 // errors returned by `GovernorLayer`
-                .layer(HandleErrorLayer::new(|_: BoxError| async {
-                    StatusCode::TOO_MANY_REQUESTS
+                .layer(HandleErrorLayer::new(|e: BoxError| async move {
+                    display_error(e)
                 }))
                 .layer(GovernorLayer {
                     config: &governor_conf,
@@ -132,6 +133,10 @@ async fn main() {
  By default, `x-ratelimit-after` is enabled but if you want to enable `x-ratelimit-limit`, `x-ratelimit-whitelisted` and `x-ratelimit-remaining` use [`use_headers`] method
 
  [`use_headers`]: crate::governor::GovernorConfigBuilder::use_headers()
+
+ # Error Handling
+
+ This crate surfaces a GovernorError with suggested headers, and includes a [`display_error`]: crate::errors::display_error() function that will turn those errors into a Response. Feel free to provide your own error handler that takes in a BoxError and returns a [`Response`](http::response::Response). Tower Layers require that all Errors be handled, or it will fail to compile. 
 
  # Common pitfalls
 
