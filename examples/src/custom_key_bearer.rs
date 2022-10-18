@@ -32,22 +32,6 @@ impl KeyExtractor for UserToken {
             )
     }
 
-    fn exceed_rate_limit_response(
-        &self,
-        negative: &governor::NotUntil<governor::clock::QuantaInstant>,
-        mut response: Response,
-    ) -> Response {
-        let wait_time = negative
-            .wait_time_from(DefaultClock::default().now())
-            .as_secs();
-        response.content_type(ContentType::json())
-            .body(
-                format!(
-                    r#"{{"code":429, "error": "TooManyRequests", "message": "Too Many Requests", "after": {wait_time}}}"#
-                )
-            )
-    }
-
     #[cfg(feature = "tracing")]
     fn key_name(&self, key: &Self::Key) -> Option<String> {
         Some("String".to_owned())

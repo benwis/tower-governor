@@ -11,6 +11,7 @@ use std::{hash::Hash, net::IpAddr};
 pub trait KeyExtractor: Clone + Debug {
     /// The type of the key.
     type Key: Clone + Hash + Eq + Debug;
+    type KeyExtractionError: std::error::Error + Send + Sync;
 
     /// The type of the error that can occur if key extraction from the request fails.
     // type KeyExtractionError: Error;
@@ -50,6 +51,7 @@ pub struct GlobalKeyExtractor;
 
 impl KeyExtractor for GlobalKeyExtractor {
     type Key = ();
+    type KeyExtractionError = GovernorError;
     // type KeyExtractionError = BoxError;
 
     #[cfg(feature = "tracing")]
@@ -82,6 +84,7 @@ pub struct PeerIpKeyExtractor;
 
 impl KeyExtractor for PeerIpKeyExtractor {
     type Key = IpAddr;
+    type KeyExtractionError = GovernorError;
     // type KeyExtractionError = BoxError;
 
     #[cfg(feature = "tracing")]
@@ -116,7 +119,7 @@ pub struct SmartIpKeyExtractor;
 
 impl KeyExtractor for SmartIpKeyExtractor {
     type Key = IpAddr;
-    // type KeyExtractionError = BoxError;
+    type KeyExtractionError = GovernorError;
 
     #[cfg(feature = "tracing")]
     fn name(&self) -> &'static str {

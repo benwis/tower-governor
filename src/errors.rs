@@ -12,6 +12,13 @@ pub enum GovernorError {
     },
     #[error("Unable to extract key!")]
     UnableToExtractKey,
+    #[error("Other Error")]
+    /// Used for custom key extractors to return their own errors
+    Other {
+        code: StatusCode,
+        msg: Option<String>,
+        headers: Option<HeaderMap>,
+    },
 }
 /// Used in the Error Handler Middleware(for Axum) to convert GovernorError into a Response
 /// This one returns a String Body with the error message, and applies a HTTP Status Code, Headers,
@@ -35,6 +42,19 @@ pub fn display_error(e: BoxError) -> Response<String> {
                 let response = Response::new("Unable To Extract Key!".to_string());
                 let (mut parts, body) = response.into_parts();
                 parts.status = StatusCode::INTERNAL_SERVER_ERROR;
+
+                Response::from_parts(parts, body)
+            }
+            GovernorError::Other { msg, code, headers } => {
+                let response = Response::new("Other Error!".to_string());
+                let (mut parts, mut body) = response.into_parts();
+                parts.status = code;
+                if let Some(headers) = headers {
+                    parts.headers = headers;
+                }
+                if let Some(msg) = msg {
+                    body = msg;
+                }
 
                 Response::from_parts(parts, body)
             }
