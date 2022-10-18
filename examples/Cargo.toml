@@ -11,7 +11,7 @@ name = "basic"
 path = "src/basic.rs"
 
 [[bin]]
-name = "custom-key-bearer"
+name = "custom_key_bearer"
 path = "src/custom_key_bearer.rs"
 
 
@@ -23,6 +23,9 @@ tokio = { version = "1.21.2", features = ["full"] }
 tracing = {version="0.1.37", features=["attributes"]}
 tracing-subscriber = "0.3"
 tower = "0.4.13"
+serde = { version = "1.0.145", features = ["derive"] }
+http = "0.2.8"
+governor = "0.5.0"
 
 
 

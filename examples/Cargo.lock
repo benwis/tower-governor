@@ -129,6 +129,9 @@ name = "examples"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "governor",
+ "http",
+ "serde",
  "tokio 1.21.2",
  "tower",
  "tower_governor",
@@ -779,6 +782,20 @@ name = "serde"
 version = "1.0.145"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "728eb6351430bccb993660dfffc5a72f91ccc1295abaa8ce19b27ebe4f75568b"
+dependencies = [
+ "serde_derive",
+]
+
+[[package]]
+name = "serde_derive"
+version = "1.0.145"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81fa1584d3d1bcacd84c277a0dfe21f5b0f6accf4a23d04d4c6d61f1af522b4c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "serde_json"
@@ -1007,7 +1024,7 @@ checksum = "b6bc1c9ce2b5135ac7f93c72918fc37feb872bdc6a5533a8b85eb4b86bfdae52"
 
 [[package]]
 name = "tower_governor"
-version = "0.0.1-alpha.0"
+version = "0.0.1-beta.1"
 dependencies = [
  "axum",
  "forwarded-header-value",

@@ -1,8 +1,13 @@
-use tokio_governor::governor::{Governor, GovernorConfigBuilder, KeyExtractor, SimpleKeyExtractionError};
-use http::StatusCode;
-use axum::{routing::get, Router};
+use http::{StatusCode, request::Request};
+use axum::{routing::get, Router, error_handling::HandleErrorLayer, BoxError};
+use tower_governor::{
+    governor::{GovernorConfigBuilder},
+    key_extractor::KeyExtractor,
+    errors::{GovernorError, display_error},
+    GovernorLayer,
+};
+use tower::ServiceBuilder;
 use std::net::SocketAddr;
-use governor::clock::{Clock, DefaultClock};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -10,32 +15,28 @@ struct UserToken;
 
 impl KeyExtractor for UserToken {
     type Key = String;
-    type KeyExtractionError = SimpleKeyExtractionError<&'static str>;
+    type KeyExtractionError = GovernorError;
 
-    #[cfg(feature = "tracing")]
-    fn name(&self) -> &'static str {
-        "Bearer token"
-    }
-
-    fn extract(&self, req: &Request) -> Result<Self::Key, Self::KeyExtractionError> {
+    fn extract<B>(&self, req: &Request<B>) -> Result<Self::Key, Self::KeyExtractionError> {
         req.headers()
             .get("Authorization")
             .and_then(|token| token.to_str().ok())
             .and_then(|token| token.strip_prefix("Bearer "))
             .and_then(|token| Some(token.trim().to_owned()))
             .ok_or(
-                Self::KeyExtractionError::new(
-                    r#"{ "code": 401, "msg": "You don't have permission to access"}"#,
-                )
-                .set_content_type(ContentType::json())
-                .set_status_code(StatusCode::UNAUTHORIZED),
+                GovernorError::Other{
+                    code: StatusCode::UNAUTHORIZED,
+                    msg: Some("You don't have permission to access".to_string()),
+                    headers: None
+                }
             )
     }
-
-    #[cfg(feature = "tracing")]
     fn key_name(&self, key: &Self::Key) -> Option<String> {
-        Some("String".to_owned())
+        Some(format!("{}", key))
     }
+    fn name(&self) -> &'static str { 
+        "UserToken"
+     }
 }
 
 async fn hello() -> &'static str {
@@ -44,20 +45,38 @@ async fn hello() -> &'static str {
 
 #[tokio::main]
 async fn main() {
+
+    // Configure tracing if desired
+    // construct a subscriber that prints formatted traces to stdout
+    let subscriber = tracing_subscriber::FmtSubscriber::new();
+    // use that subscriber to process traces emitted after this point
+    tracing::subscriber::set_global_default(subscriber).unwrap();
+
     // Allow bursts with up to five requests per IP address
     // and replenishes one element every two seconds
     let governor_conf = GovernorConfigBuilder::default()
-        .per_second(2)
+        .per_second(20)
         .burst_size(5)
+        .key_extractor(UserToken)
+        .use_headers()
         .finish()
         .unwrap();
     // build our application with a route
     let app = Router::new()
         // `GET /` goes to `root`
         .route("/", get(hello))
-        .layer(GovernorLayer {
-            config: governor_conf,
-        });
+        .layer(
+            ServiceBuilder::new()
+                // this middleware goes above `GovernorLayer` because it will receive
+                // errors returned by `GovernorLayer`
+                .layer(HandleErrorLayer::new(|e: BoxError| async move {
+                    display_error(e)
+                }))
+                .layer(GovernorLayer {
+                    config: &governor_conf,
+                })
+        );
+        
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
