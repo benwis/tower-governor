@@ -71,6 +71,8 @@ async fn main() {
                 // this middleware goes above `GovernorLayer` because it will receive
                 // errors returned by `GovernorLayer`
                 .layer(HandleErrorLayer::new(|e: BoxError| async move {
+                    // Provided Error handling function to turn Errors into Responses
+                    // Feel free to write your own!
                     display_error(e)
                 }))
                 .layer(GovernorLayer {
@@ -94,10 +96,9 @@ async fn main() {
 
  Instead of using the configuration builder you can use predefined presets.
 
- + [`GovernorConfig::default()`](): The default configuration which is suitable for most services.
- Allows bursts with up to eight requests and replenishes one element after 500ms, based on peer IP.
+ + [`GovernorConfig::default()`](https://docs.rs/tower_governor/latest/tower_governor/governor/struct.GovernorConfig.html#method.default): The default configuration which is suitable for most services. Allows bursts with up to eight requests and replenishes one element after 500ms, based on peer IP.
 
- + [`GovernorConfig::secure()`](): A default configuration for security related services.
+ + [`GovernorConfig::secure()`](https://docs.rs/tower_governor/latest/tower_governor/governor/struct.GovernorConfig.html#method.secure): A default configuration for security related services.
  Allows bursts with up to two requests and replenishes one element after four seconds, based on peer IP.
 
  For example the secure configuration can be used as a short version of this code:
@@ -125,22 +126,21 @@ async fn main() {
  - [SmartIpKeyExtractor]: Looks for common IP identification headers usually provided by CDNs and reverse proxies in order(x-forwarded-for,x-real-ip, forwarded) and falls back to the peer IP address.
  - [GlobalKeyExtractor]: uses the same key for all incoming requests
 
- Check out the [custom_key_bearer] example for more information.
- [custom_key_bearer]: https://github.com/benwis/tower-governor/blob/main/examples/src/custom_key_bearer.rs
+ Check out the [custom_key_bearer](https://github.com/benwis/tower-governor/blob/main/examples/src/custom_key_bearer.rs) example for more information.
+
 
  # Add x-ratelimit headers
 
- By default, `x-ratelimit-after` is enabled but if you want to enable `x-ratelimit-limit`, `x-ratelimit-whitelisted` and `x-ratelimit-remaining` use [`use_headers`] method
+ By default, `x-ratelimit-after` is enabled but if you want to enable `x-ratelimit-limit`, `x-ratelimit-whitelisted` and `x-ratelimit-remaining` use the [`.use_headers()`](https://docs.rs/tower_governor/latest/tower_governor/governor/struct.GovernorConfigBuilder.html#method.use_headers) method on your GovernorConfig.
 
- [`use_headers`]: crate::governor::GovernorConfigBuilder::use_headers()
 
  # Error Handling
 
- This crate surfaces a GovernorError with suggested headers, and includes a [`display_error`]: crate::errors::display_error() function that will turn those errors into a Response. Feel free to provide your own error handler that takes in a BoxError and returns a [`Response`](http::response::Response). Tower Layers require that all Errors be handled, or it will fail to compile. 
+ This crate surfaces a GovernorError with suggested headers, and includes a [`display_error`]: crate::errors::display_error() function that will turn those errors into a Response. Feel free to provide your own error handler that takes in a BoxError and returns a [`Response`](https://docs.rs/http/latest/http/response/struct.Response.html). Tower Layers require that all Errors be handled, or it will fail to compile. 
 
  # Common pitfalls
 
  1. Do not construct the same configuration multiple times, unless explicitly wanted!
- This will create an independent rate limiter for each configuration! Instead pass the same configuration reference into [`Governor::new()`], like it is described in the example.
+ This will create an independent rate limiter for each configuration! Instead pass the same configuration reference into [`Governor::new()`](https://docs.rs/tower_governor/latest/tower_governor/governor/struct.Governor.html#method.new), like it is described in the example.
 
- 2. Be careful to create your server with `.into_make_service_with_connection_info::<SocketAddr>` instead of `.into_make_service()` if you are using the default PeerIpKeyExtractor. Otherwise there will be no peer ip address for Tower to find!
+ 2. Be careful to create your server with [`.into_make_service_with_connect_info::<SocketAddr>`](https://docs.rs/axum/latest/axum/struct.Router.html#method.into_make_service_with_connect_info) instead of `.into_make_service()` if you are using the default PeerIpKeyExtractor. Otherwise there will be no peer ip address for Tower to find!

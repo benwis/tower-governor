@@ -14,29 +14,13 @@ pub trait KeyExtractor: Clone + Debug {
     type KeyExtractionError: std::error::Error + Send + Sync;
 
     /// The type of the error that can occur if key extraction from the request fails.
-    // type KeyExtractionError: Error;
-
+    /// Should be one of the predefined GovernorErrors, or GovernorError::Other
     #[cfg(feature = "tracing")]
     /// Name of this extractor (only used for tracing).
     fn name(&self) -> &'static str;
 
-    /// Extraction method, will return [`KeyExtractionError`] response when the extract failed
-    ///
-    /// [`KeyExtractionError`]: KeyExtractor::KeyExtractionError
+    /// Extraction method, will return [`GovernorError`] response when the extract failed
     fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, GovernorError>;
-
-    // /// The content you want to show it when the rate limit is exceeded.
-    // /// You can calculate the time at which a caller can expect the next positive rate-limiting result by using [`NotUntil`].
-    // /// The [`ResponseBuilder`] allows you to build a fully customized [`Response`] in case of an error.
-    // fn exceed_rate_limit_response(&self, negative: &NotUntil<QuantaInstant>) -> BoxError {
-    //     let wait_time = negative
-    //         .wait_time_from(DefaultClock::default().now())
-    //         .as_secs();
-    //     Box::new(GovernorError::TooManyRequests {
-    //         wait_time,
-    //         headers: None,
-    //     })
-    // }
 
     #[cfg(feature = "tracing")]
     /// Value of the extracted key (only used in tracing).
@@ -52,7 +36,6 @@ pub struct GlobalKeyExtractor;
 impl KeyExtractor for GlobalKeyExtractor {
     type Key = ();
     type KeyExtractionError = GovernorError;
-    // type KeyExtractionError = BoxError;
 
     #[cfg(feature = "tracing")]
     fn name(&self) -> &'static str {
@@ -77,6 +60,7 @@ impl KeyExtractor for GlobalKeyExtractor {
 /// In this case, rate limiting will be applied to _all_ incoming requests as if they were from the same user.
 ///
 /// If this is not the behavior you want, you may:
+///  - Use the SmartIpKeyExtractor to get the IP from the `Forwarded` or `X-Forwarded-For` headers that most proxies set
 /// - implement your own [KeyExtractor] that tries to get IP from the `Forwarded` or `X-Forwarded-For` headers that most reverse proxies set
 /// - make absolutely sure that you only trust these headers when the peer IP is the IP of your reverse proxy (otherwise any user could set them to fake its IP)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,7 +69,6 @@ pub struct PeerIpKeyExtractor;
 impl KeyExtractor for PeerIpKeyExtractor {
     type Key = IpAddr;
     type KeyExtractionError = GovernorError;
-    // type KeyExtractionError = BoxError;
 
     #[cfg(feature = "tracing")]
     fn name(&self) -> &'static str {
@@ -93,7 +76,6 @@ impl KeyExtractor for PeerIpKeyExtractor {
     }
 
     //type Key: Clone + Hash + Eq;
-    //type Boxerror:  pub type BoxError = Box<dyn Error + Send + Sync>;
     fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, GovernorError> {
         req.extensions()
             .get::<ConnectInfo<SocketAddr>>()

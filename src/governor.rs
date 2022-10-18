@@ -16,15 +16,6 @@ pub const DEFAULT_BURST_SIZE: u32 = 8;
 pub type SharedRateLimiter<Key, M> =
     Arc<RateLimiter<Key, DefaultKeyedStateStore<Key>, DefaultClock, M>>;
 
-// #[derive(Debug)]
-// pub struct WrappedNoOpMiddleware(NoOpMiddleware<QuantaInstant>);
-
-// impl Clone for WrappedNoOpMiddleware {
-//     fn clone(&self) -> Self {
-//         Self(self.0.clone())
-//     }
-// }
-
 /// Helper struct for building a configuration for the governor middleware.
 ///
 /// # Example
