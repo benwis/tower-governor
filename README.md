@@ -1,4 +1,4 @@
- A Tower service and layer that provides a rate-limiting backed by [governor](https://github.com/antifuchs/governor). Based heavily on the work done for [actix-governor](https://github.com/AaronErhardt/actix-governor). Works with Axum, Hyper, Tower, Tonic, and anything else based on Tower!
+ A Tower service and layer that provides a rate-limiting backend by [governor](https://github.com/antifuchs/governor). Based heavily on the work done for [actix-governor](https://github.com/AaronErhardt/actix-governor). Works with Axum, Hyper, Tonic, and anything else based on Tower!
 
  # Features:
 
@@ -122,8 +122,8 @@ async fn main() {
 
  This is achieved by defining a [KeyExtractor] and giving it to a [Governor] instance.
  Three ready-to-use key extractors are provided:
- - [PeerIpKeyExtractor]: this is the default
- - [SmartIpKeyExtractor]: Looks for common IP identification headers usually provided by CDNs and reverse proxies in order(x-forwarded-for,x-real-ip, forwarded) and falls back to the peer IP address.
+ - [PeerIpKeyExtractor]: this is the default, it uses the peer IP address of the request.
+ - [SmartIpKeyExtractor]: Looks for common IP identification headers usually provided by reverse proxies in order(x-forwarded-for,x-real-ip, forwarded) and falls back to the peer IP address.
  - [GlobalKeyExtractor]: uses the same key for all incoming requests
 
  Check out the [custom_key_bearer](https://github.com/benwis/tower-governor/blob/main/examples/src/custom_key_bearer.rs) example for more information.
