@@ -1,11 +1,7 @@
-use axum::{routing::get, Router, error_handling::HandleErrorLayer, BoxError};
-use tower_governor::{
-    governor::{GovernorConfigBuilder},
-    errors::{display_error},
-    GovernorLayer,
-};
-use tower::{ServiceBuilder};
+use axum::{error_handling::HandleErrorLayer, routing::get, BoxError, Router};
 use std::net::SocketAddr;
+use tower::ServiceBuilder;
+use tower_governor::{errors::display_error, governor::GovernorConfigBuilder, GovernorLayer};
 
 async fn hello() -> &'static str {
     "Hello world"
@@ -13,7 +9,6 @@ async fn hello() -> &'static str {
 
 #[tokio::main]
 async fn main() {
-
     // Configure tracing if desired
     // construct a subscriber that prints formatted traces to stdout
     let subscriber = tracing_subscriber::FmtSubscriber::new();
@@ -22,11 +17,16 @@ async fn main() {
 
     // Allow bursts with up to five requests per IP address
     // and replenishes one element every two seconds
-    let governor_conf = GovernorConfigBuilder::default()
-        .per_second(2)
-        .burst_size(5)
-        .finish()
-        .unwrap();
+    // We Box it because Axum 0.6 requires all Layers to be Clone
+    // and thus we need a static reference to it
+    let governor_conf = Box::new(
+        GovernorConfigBuilder::default()
+            .per_second(2)
+            .burst_size(5)
+            .finish()
+            .unwrap(),
+    );
+
     // build our application with a route
     let app = Router::new()
         // `GET /` goes to `root`
@@ -39,10 +39,10 @@ async fn main() {
                     display_error(e)
                 }))
                 .layer(GovernorLayer {
-                    config: &governor_conf,
-                })
+                    // We can leak this because it is created once and then
+                    config: Box::leak(governor_conf),
+                }),
         );
-        
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
