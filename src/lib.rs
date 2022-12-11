@@ -23,7 +23,6 @@ use std::{future::Future, pin::Pin};
 use tower::{BoxError, Layer, Service};
 
 /// The Layer type that implements tower::Layer and is passed into `.layer()`
-#[derive(Clone)]
 pub struct GovernorLayer<'a, K, M>
 where
     K: KeyExtractor,
@@ -44,6 +43,16 @@ where
     }
 }
 
+/// https://stegosaurusdormant.com/understanding-derive-clone/
+impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> Clone
+    for GovernorLayer<'_, K, M>
+{
+    fn clone(&self) -> Self {
+        Self {
+            config: self.config.clone()
+        }
+    }
+}
 // Implement tower::Service for Governor
 impl<K, S, ReqBody, ResBody> Service<Request<ReqBody>> for Governor<K, NoOpMiddleware, S>
 where

@@ -54,13 +54,14 @@ async fn main() {
 
     // Allow bursts with up to five requests per IP address
     // and replenishes one element every two seconds
-    let governor_conf = GovernorConfigBuilder::default()
+    let governor_conf = Box::new(GovernorConfigBuilder::default()
         .per_second(20)
         .burst_size(5)
         .key_extractor(UserToken)
         .use_headers()
         .finish()
-        .unwrap();
+        .unwrap());
+
     // build our application with a route
     let app = Router::new()
         // `GET /` goes to `root`
@@ -73,7 +74,7 @@ async fn main() {
                     display_error(e)
                 }))
                 .layer(GovernorLayer {
-                    config: &governor_conf,
+                    config: Box::leak(governor_conf),
                 })
         );
         
