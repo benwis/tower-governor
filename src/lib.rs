@@ -9,7 +9,7 @@ pub mod key_extractor;
 use crate::governor::{Governor, GovernorConfig};
 use ::governor::clock::{Clock, DefaultClock, QuantaInstant};
 use ::governor::middleware::{NoOpMiddleware, RateLimitingMiddleware, StateInformationMiddleware};
-use errors::GovernorError;
+pub use errors::GovernorError;
 use futures_core::ready;
 use http::response::Response;
 
@@ -44,12 +44,10 @@ where
 }
 
 /// https://stegosaurusdormant.com/understanding-derive-clone/
-impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> Clone
-    for GovernorLayer<'_, K, M>
-{
+impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> Clone for GovernorLayer<'_, K, M> {
     fn clone(&self) -> Self {
         Self {
-            config: self.config.clone()
+            config: self.config.clone(),
         }
     }
 }
