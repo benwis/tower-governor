@@ -31,11 +31,13 @@ async fn _main() {
 /// without having to create an HTTP server.
 #[allow(dead_code)]
 fn app() -> Router {
-    let config = GovernorConfigBuilder::default()
-        .per_millisecond(90)
-        .burst_size(2)
-        .finish()
-        .unwrap();
+    let config = Box::new(
+        GovernorConfigBuilder::default()
+            .per_millisecond(90)
+            .burst_size(2)
+            .finish()
+            .unwrap(),
+    );
 
     Router::new()
         // `GET /` goes to `root`
@@ -50,7 +52,9 @@ fn app() -> Router {
                 .layer(HandleErrorLayer::new(|e: BoxError| async move {
                     display_error(e)
                 }))
-                .layer(GovernorLayer { config: &config }),
+                .layer(GovernorLayer {
+                    config: Box::leak(config),
+                }),
         )
         .layer(TraceLayer::new_for_http())
 }
@@ -179,12 +183,14 @@ mod governor_tests {
 
         let (tx, rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
-            let config = GovernorConfigBuilder::default()
-                .per_millisecond(90)
-                .burst_size(2)
-                .methods(vec![Method::GET])
-                .finish()
-                .unwrap();
+            let config = Box::new(
+                GovernorConfigBuilder::default()
+                    .per_millisecond(90)
+                    .burst_size(2)
+                    .methods(vec![Method::GET])
+                    .finish()
+                    .unwrap(),
+            );
 
             let app = Router::new()
                 // `GET /` goes to `root`
@@ -199,7 +205,9 @@ mod governor_tests {
                         .layer(HandleErrorLayer::new(|e: BoxError| async move {
                             display_error(e)
                         }))
-                        .layer(GovernorLayer { config: &config }),
+                        .layer(GovernorLayer {
+                            config: Box::leak(config),
+                        }),
                 )
                 .layer(TraceLayer::new_for_http());
             let server = Server::from_tcp(listener)
@@ -245,12 +253,14 @@ mod governor_tests {
 
         let (tx, rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
-            let config = GovernorConfigBuilder::default()
-                .per_millisecond(90)
-                .burst_size(2)
-                .use_headers()
-                .finish()
-                .unwrap();
+            let config = Box::new(
+                GovernorConfigBuilder::default()
+                    .per_millisecond(90)
+                    .burst_size(2)
+                    .use_headers()
+                    .finish()
+                    .unwrap(),
+            );
 
             let app = Router::new()
                 // `GET /` goes to `root`
@@ -265,7 +275,9 @@ mod governor_tests {
                         .layer(HandleErrorLayer::new(|e: BoxError| async move {
                             display_error(e)
                         }))
-                        .layer(GovernorLayer { config: &config }),
+                        .layer(GovernorLayer {
+                            config: Box::leak(config),
+                        }),
                 )
                 .layer(TraceLayer::new_for_http());
             let server = Server::from_tcp(listener)
@@ -424,13 +436,15 @@ mod governor_tests {
 
         let (tx, rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
-            let config = GovernorConfigBuilder::default()
-                .per_millisecond(90)
-                .burst_size(2)
-                .methods(vec![Method::GET])
-                .use_headers()
-                .finish()
-                .unwrap();
+            let config = Box::new(
+                GovernorConfigBuilder::default()
+                    .per_millisecond(90)
+                    .burst_size(2)
+                    .methods(vec![Method::GET])
+                    .use_headers()
+                    .finish()
+                    .unwrap(),
+            );
 
             let app = Router::new()
                 // `GET /` goes to `root`
@@ -445,7 +459,9 @@ mod governor_tests {
                         .layer(HandleErrorLayer::new(|e: BoxError| async move {
                             display_error(e)
                         }))
-                        .layer(GovernorLayer { config: &config }),
+                        .layer(GovernorLayer {
+                            config: Box::leak(config),
+                        }),
                 )
                 .layer(TraceLayer::new_for_http());
             let server = Server::from_tcp(listener)
