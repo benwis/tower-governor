@@ -8,10 +8,9 @@ use std::net::SocketAddr;
 use std::{hash::Hash, net::IpAddr};
 
 /// Generic structure of what is needed to extract a rate-limiting key from an incoming request.
-pub trait KeyExtractor: Clone + Debug {
+pub trait KeyExtractor: Clone {
     /// The type of the key.
     type Key: Clone + Hash + Eq + Debug;
-    type KeyExtractionError: std::error::Error + Send + Sync;
 
     /// The type of the error that can occur if key extraction from the request fails.
     /// Should be one of the predefined GovernorErrors, or GovernorError::Other
@@ -35,7 +34,6 @@ pub struct GlobalKeyExtractor;
 
 impl KeyExtractor for GlobalKeyExtractor {
     type Key = ();
-    type KeyExtractionError = GovernorError;
 
     #[cfg(feature = "tracing")]
     fn name(&self) -> &'static str {
@@ -68,7 +66,6 @@ pub struct PeerIpKeyExtractor;
 
 impl KeyExtractor for PeerIpKeyExtractor {
     type Key = IpAddr;
-    type KeyExtractionError = GovernorError;
 
     #[cfg(feature = "tracing")]
     fn name(&self) -> &'static str {
@@ -101,7 +98,6 @@ pub struct SmartIpKeyExtractor;
 
 impl KeyExtractor for SmartIpKeyExtractor {
     type Key = IpAddr;
-    type KeyExtractionError = GovernorError;
 
     #[cfg(feature = "tracing")]
     fn name(&self) -> &'static str {
