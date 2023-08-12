@@ -12,7 +12,7 @@ pub const DEFAULT_PERIOD: Duration = Duration::from_millis(500);
 pub const DEFAULT_BURST_SIZE: u32 = 8;
 
 // Required by Governor's RateLimiter to share it across threads
-// See Governor User Guide: https://docs.rs/governor/0.5.0/governor/_guide/index.html
+// See Governor User Guide: https://docs.rs/governor/0.6.0/governor/_guide/index.html
 pub type SharedRateLimiter<Key, M> =
     Arc<RateLimiter<Key, DefaultKeyedStateStore<Key>, DefaultClock, M>>;
 
