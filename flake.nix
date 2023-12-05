@@ -22,25 +22,13 @@
           buildInputs = [
             openssl
             pkg-config
-            llvmPackages_latest.llvm
-            llvmPackages_latest.bintools
-            zlib.out
-            llvmPackages_latest.lld
-            exa
-            fd
-            ripgrep
-            cargo-edit
             (rust-bin.stable.latest.default.override {
               extensions= [ "rust-src" "rust-analyzer" ];
               targets = [ "wasm32-unknown-unknown" ];
             })
-            cargo-watch
           ];
 
           shellHook = ''
-            alias ls=exa
-            alias find=fd
-            alias grep=ripgrep
             '';
         };
       }

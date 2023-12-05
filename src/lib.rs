@@ -47,7 +47,7 @@ where
 impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> Clone for GovernorLayer<'_, K, M> {
     fn clone(&self) -> Self {
         Self {
-            config: self.config.clone(),
+            config: self.config,
         }
     }
 }
