@@ -21,8 +21,9 @@ async fn _main() {
 
     tracing::debug!("listening on {}", addr);
 
-    axum::Server::bind(&addr)
-        .serve(app().into_make_service_with_connect_info::<SocketAddr>())
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+
+    axum::serve(listener, app().into_make_service())
         .await
         .unwrap();
 }
@@ -62,26 +63,27 @@ fn app() -> Router {
 #[cfg(test)]
 mod governor_tests {
     use super::*;
-    use axum::{
-        http::{self, StatusCode},
-        Server,
-    };
-    use http::header::HeaderName;
-    use std::net::{SocketAddr, TcpListener};
+    use axum::http;
+    use reqwest::header::HeaderName;
+    use reqwest::StatusCode;
+    use std::net::SocketAddr;
+    use tokio::net::TcpListener;
 
     #[tokio::test]
     async fn hello_world() {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
 
         let (tx, rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
             let app = app();
-            let server = Server::from_tcp(listener)
-                .unwrap()
-                .serve(app.into_make_service_with_connect_info::<SocketAddr>());
             tx.send(()).unwrap();
-            server.await.expect("server error");
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .unwrap();
         });
         rx.await.unwrap();
 
@@ -117,18 +119,20 @@ mod governor_tests {
 
     #[tokio::test]
     async fn test_server() {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let url = format!("http://{}", addr);
 
         let (tx, rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
             let app = app();
-            let server = Server::from_tcp(listener)
-                .unwrap()
-                .serve(app.into_make_service_with_connect_info::<SocketAddr>());
             tx.send(()).unwrap();
-            server.await.expect("server error");
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .unwrap();
         });
         rx.await.unwrap();
 
@@ -177,7 +181,7 @@ mod governor_tests {
         use crate::governor::GovernorConfigBuilder;
         use http::Method;
 
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let url = format!("http://{}", addr);
 
@@ -210,11 +214,13 @@ mod governor_tests {
                         }),
                 )
                 .layer(TraceLayer::new_for_http());
-            let server = Server::from_tcp(listener)
-                .unwrap()
-                .serve(app.into_make_service_with_connect_info::<SocketAddr>());
             tx.send(()).unwrap();
-            server.await.expect("server error");
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .unwrap();
         });
         rx.await.unwrap();
 
@@ -247,7 +253,7 @@ mod governor_tests {
     async fn test_server_use_headers() {
         use crate::governor::GovernorConfigBuilder;
 
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let url = format!("http://{}", addr);
 
@@ -280,11 +286,13 @@ mod governor_tests {
                         }),
                 )
                 .layer(TraceLayer::new_for_http());
-            let server = Server::from_tcp(listener)
-                .unwrap()
-                .serve(app.into_make_service_with_connect_info::<SocketAddr>());
             tx.send(()).unwrap();
-            server.await.expect("server error");
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .unwrap();
         });
         rx.await.unwrap();
 
@@ -430,7 +438,7 @@ mod governor_tests {
         use crate::governor::GovernorConfigBuilder;
         use http::Method;
 
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let url = format!("http://{}", addr);
 
@@ -464,11 +472,13 @@ mod governor_tests {
                         }),
                 )
                 .layer(TraceLayer::new_for_http());
-            let server = Server::from_tcp(listener)
-                .unwrap()
-                .serve(app.into_make_service_with_connect_info::<SocketAddr>());
             tx.send(()).unwrap();
-            server.await.expect("server error");
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .unwrap();
         });
         rx.await.unwrap();
 
