@@ -1,5 +1,3 @@
-use std::net::SocketAddr;
-
 use axum::{error_handling::HandleErrorLayer, routing::get, Router};
 use tower::{BoxError, ServiceBuilder};
 use tower_http::trace::TraceLayer;
