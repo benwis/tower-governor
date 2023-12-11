@@ -225,6 +225,12 @@ pub struct GovernorConfig<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInsta
     methods: Option<Vec<Method>>,
 }
 
+impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfig<K, M> {
+    pub fn limiter(&self) -> &SharedRateLimiter<K::Key, M> {
+        &self.limiter
+    }
+}
+
 impl Default for GovernorConfig<PeerIpKeyExtractor, NoOpMiddleware> {
     /// The default configuration which is suitable for most services.
     /// Allows bursts with up to eight requests and replenishes one element after 500ms, based on peer IP.

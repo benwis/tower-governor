@@ -25,7 +25,4 @@ tracing-subscriber = "0.3"
 tower = "0.4.13"
 serde = { version = "1.0.149", features = ["derive"] }
 http = "1.0.0"
-governor = "0.5.1"
-
-
-
+governor = "0.6.0"
