@@ -108,20 +108,27 @@ where
                     let mut headers = HeaderMap::new();
                     headers.insert("x-ratelimit-after", wait_time.into());
 
+                    let error_response = self.error_handler()(GovernorError::TooManyRequests {
+                        wait_time,
+                        headers: Some(headers),
+                    });
+
                     ResponseFuture {
                         inner: Kind::Error {
-                            gov_error: GovernorError::TooManyRequests {
-                                wait_time,
-                                headers: Some(headers),
-                            },
+                            error_response: Some(error_response),
                         },
                     }
                 }
             },
 
-            Err(e) => ResponseFuture {
-                inner: Kind::Error { gov_error: e },
-            },
+            Err(e) => {
+                let error_response = self.error_handler()(e);
+                ResponseFuture {
+                    inner: Kind::Error {
+                        error_response: Some(error_response),
+                    },
+                }
+            }
         }
     }
 }
@@ -154,7 +161,7 @@ enum Kind<F> {
         future: F,
     },
     Error {
-        gov_error: GovernorError,
+        error_response: Option<Response<String>>,
     },
 }
 
@@ -199,7 +206,9 @@ where
 
                 Poll::Ready(Ok(response))
             }
-            KindProj::Error { gov_error } => Poll::Ready(Ok(gov_error.as_response())),
+            KindProj::Error { error_response } => Poll::Ready(Ok(error_response.take().expect("
+                <Governor as Service<Request<_>>>::call must produce Response<String> when GovernorError occurs.
+            ").map(B::from))),
         }
     }
 }
@@ -210,6 +219,8 @@ impl<K, S, ReqBody, ResBody> Service<Request<ReqBody>>
 where
     K: KeyExtractor,
     S: Service<Request<ReqBody>, Response = Response<ResBody>>,
+    // Body type of response must impl From<String> trait to convert potential error
+    // produced by governor to re
     ResBody: From<String>,
 {
     type Response = S::Response;
@@ -274,12 +285,14 @@ where
                     );
                     headers.insert("x-ratelimit-remaining", 0.into());
 
+                    let error_response = self.error_handler()(GovernorError::TooManyRequests {
+                        wait_time,
+                        headers: Some(headers),
+                    });
+
                     ResponseFuture {
                         inner: Kind::Error {
-                            gov_error: GovernorError::TooManyRequests {
-                                wait_time,
-                                headers: Some(headers),
-                            },
+                            error_response: Some(error_response),
                         },
                     }
                 }
@@ -287,11 +300,11 @@ where
 
             // Extraction failed, stop right now.
             Err(e) => {
-                // Not sure if I should do this, but not sure how to return an Error
-                // in a match arm like this
-                // Either::Right(e.into())
+                let error_response = self.error_handler()(e);
                 ResponseFuture {
-                    inner: Kind::Error { gov_error: e },
+                    inner: Kind::Error {
+                        error_response: Some(error_response),
+                    },
                 }
             }
         }

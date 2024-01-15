@@ -1,7 +1,6 @@
 use http::{HeaderMap, Response, StatusCode};
 use std::mem;
 use thiserror::Error;
-use tower::BoxError;
 
 /// The error type returned by tower-governor.
 #[derive(Debug, Error, Clone)]
@@ -20,22 +19,6 @@ pub enum GovernorError {
         msg: Option<String>,
         headers: Option<HeaderMap>,
     },
-}
-/// Used in the Error Handler Middleware(for Axum) to convert GovernorError into a Response
-/// This one returns a String Body with the error message, and applies a HTTP Status Code, Headers,
-/// and msg body from the Error, if included.
-/// Feel free to use your own, as long as it returns a Response
-pub fn display_error(mut e: BoxError) -> Response<String> {
-    if e.is::<GovernorError>() {
-        // It shouldn't be possible for this to panic, since we already know it's a GovernorError
-        e.downcast_mut::<GovernorError>().unwrap().as_response()
-    } else {
-        let response = Response::new("Internal Server Error".to_string());
-        let (mut parts, body) = response.into_parts();
-        parts.status = StatusCode::INTERNAL_SERVER_ERROR;
-
-        Response::from_parts(parts, body)
-    }
 }
 
 impl GovernorError {

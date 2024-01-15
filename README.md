@@ -38,7 +38,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
-use tower_governor::{errors::display_error, governor::GovernorConfigBuilder, GovernorLayer};
+use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 
 async fn hello() -> &'static str {
     "Hello world"
@@ -139,7 +139,9 @@ async fn main() {
 
  # Error Handling
 
- This crate surfaces a GovernorError with suggested headers, and includes a [`display_error`]: crate::errors::display_error() function that will turn those errors into a Response. Feel free to provide your own error handler that takes in a BoxError and returns a [`Response`](https://docs.rs/http/latest/http/response/struct.Response.html). Tower Layers require that all Errors be handled, or it will fail to compile. 
+ This crate surfaces a GovernorError with suggested headers, and includes [`GovernorConfigBuilder::error_handler`] method that will turn those errors into a Response. Feel free to provide your own error handler that takes in [`GovernorError`] and returns a [`Response`](https://docs.rs/http/latest/http/response/struct.Response.html). 
+
+[`GovernorConfigBuilder::error_handler`]: crate::governor::GovernorConfigBuilder::error_handler
 
  # Common pitfalls
 
