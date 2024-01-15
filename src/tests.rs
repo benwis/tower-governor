@@ -1,9 +1,8 @@
-use axum::{error_handling::HandleErrorLayer, routing::get, Router};
-use tower::{BoxError, ServiceBuilder};
+use axum::{routing::get, Router};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::{errors::display_error, governor::GovernorConfigBuilder, GovernorLayer};
+use crate::{governor::GovernorConfigBuilder, GovernorLayer};
 
 #[tokio::main]
 async fn _main() {
@@ -44,17 +43,9 @@ fn app() -> Router {
             "/",
             get(|| async { "Hello, World!" }).post(|| async { "Hello, Post World!" }),
         )
-        .layer(
-            ServiceBuilder::new()
-                // this middleware goes above `GovernorLayer` because it will receive
-                // errors returned by `GovernorLayer`
-                .layer(HandleErrorLayer::new(|e: BoxError| async move {
-                    display_error(e)
-                }))
-                .layer(GovernorLayer {
-                    config: Box::leak(config),
-                }),
-        )
+        .layer(GovernorLayer {
+            config: Box::leak(config),
+        })
         .layer(TraceLayer::new_for_http())
 }
 
@@ -200,17 +191,9 @@ mod governor_tests {
                     "/",
                     get(|| async { "Hello, World!" }).post(|| async { "Hello, Post World!" }),
                 )
-                .layer(
-                    ServiceBuilder::new()
-                        // this middleware goes above `GovernorLayer` because it will receive
-                        // errors returned by `GovernorLayer`
-                        .layer(HandleErrorLayer::new(|e: BoxError| async move {
-                            display_error(e)
-                        }))
-                        .layer(GovernorLayer {
-                            config: Box::leak(config),
-                        }),
-                )
+                .layer(GovernorLayer {
+                    config: Box::leak(config),
+                })
                 .layer(TraceLayer::new_for_http());
             tx.send(()).unwrap();
             axum::serve(
@@ -272,17 +255,9 @@ mod governor_tests {
                     "/",
                     get(|| async { "Hello, World!" }).post(|| async { "Hello, Post World!" }),
                 )
-                .layer(
-                    ServiceBuilder::new()
-                        // this middleware goes above `GovernorLayer` because it will receive
-                        // errors returned by `GovernorLayer`
-                        .layer(HandleErrorLayer::new(|e: BoxError| async move {
-                            display_error(e)
-                        }))
-                        .layer(GovernorLayer {
-                            config: Box::leak(config),
-                        }),
-                )
+                .layer(GovernorLayer {
+                    config: Box::leak(config),
+                })
                 .layer(TraceLayer::new_for_http());
             tx.send(()).unwrap();
             axum::serve(
@@ -310,7 +285,7 @@ mod governor_tests {
             res.headers()
                 .get(HeaderName::from_static("x-ratelimit-remaining"))
                 .unwrap(),
-            "0" //TODO: Should this be 1?!?
+            "1" //TODO: Should this be 1?!?
         );
         assert!(res
             .headers()
@@ -458,17 +433,9 @@ mod governor_tests {
                     "/",
                     get(|| async { "Hello, World!" }).post(|| async { "Hello, Post World!" }),
                 )
-                .layer(
-                    ServiceBuilder::new()
-                        // this middleware goes above `GovernorLayer` because it will receive
-                        // errors returned by `GovernorLayer`
-                        .layer(HandleErrorLayer::new(|e: BoxError| async move {
-                            display_error(e)
-                        }))
-                        .layer(GovernorLayer {
-                            config: Box::leak(config),
-                        }),
-                )
+                .layer(GovernorLayer {
+                    config: Box::leak(config),
+                })
                 .layer(TraceLayer::new_for_http());
             tx.send(()).unwrap();
             axum::serve(
@@ -496,7 +463,7 @@ mod governor_tests {
             res.headers()
                 .get(HeaderName::from_static("x-ratelimit-remaining"))
                 .unwrap(),
-            "0" //TODO: Should this be 1?!?
+            "1" //TODO: Should this be 1?!?
         );
         assert!(res
             .headers()

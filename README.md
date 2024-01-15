@@ -79,18 +79,10 @@ async fn main() {
     let app = Router::new()
         // `GET /` goes to `root`
         .route("/", get(hello))
-        .layer(
-            ServiceBuilder::new()
-                // this middleware goes above `GovernorLayer` because it will receive
-                // errors returned by `GovernorLayer`
-                .layer(HandleErrorLayer::new(|e: BoxError| async move {
-                    display_error(e)
-                }))
-                .layer(GovernorLayer {
+        .layer(GovernorLayer {
                     // We can leak this because it is created once and then
                     config: Box::leak(governor_conf),
-                }),
-        );
+        });
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`

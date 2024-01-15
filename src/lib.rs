@@ -20,7 +20,7 @@ use key_extractor::KeyExtractor;
 use pin_project::pin_project;
 use std::task::{Context, Poll};
 use std::{future::Future, pin::Pin};
-use tower::{BoxError, Layer, Service};
+use tower::{Layer, Service};
 
 /// The Layer type that implements tower::Layer and is passed into `.layer()`
 pub struct GovernorLayer<'a, K, M>
@@ -56,17 +56,14 @@ impl<K, S, ReqBody, ResBody> Service<Request<ReqBody>> for Governor<K, NoOpMiddl
 where
     K: KeyExtractor,
     S: Service<Request<ReqBody>, Response = Response<ResBody>>,
-    S::Error: Into<BoxError>,
+    ResBody: From<String>,
 {
     type Response = S::Response;
-    type Error = BoxError;
+    type Error = S::Error;
     type Future = ResponseFuture<S::Future>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match self.inner.poll_ready(cx) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(r) => Poll::Ready(r.map_err(Into::into)),
-        }
+        self.inner.poll_ready(cx)
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
@@ -161,25 +158,22 @@ enum Kind<F> {
     },
 }
 
-impl<F, B, Error> Future for ResponseFuture<F>
+impl<F, B, E> Future for ResponseFuture<F>
 where
-    F: Future<Output = Result<Response<B>, Error>>,
-    Error: Into<BoxError>,
+    F: Future<Output = Result<Response<B>, E>>,
+    B: From<String>,
 {
-    type Output = Result<Response<B>, BoxError>;
+    type Output = Result<Response<B>, E>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project().inner.project() {
-            KindProj::Passthrough { future } => {
-                let response = ready!(future.poll(cx).map_err(Into::into))?;
-                Poll::Ready(Ok(response))
-            }
+            KindProj::Passthrough { future } => future.poll(cx),
             KindProj::RateLimitHeader {
                 future,
                 burst_size,
                 remaining_burst_capacity,
             } => {
-                let mut response = ready!(future.poll(cx).map_err(Into::into))?;
+                let mut response = ready!(future.poll(cx))?;
 
                 let mut headers = HeaderMap::new();
                 headers.insert(
@@ -195,7 +189,7 @@ where
                 Poll::Ready(Ok(response))
             }
             KindProj::WhitelistedHeader { future } => {
-                let mut response = ready!(future.poll(cx).map_err(Into::into))?;
+                let mut response = ready!(future.poll(cx))?;
 
                 let headers = response.headers_mut();
                 headers.insert(
@@ -205,7 +199,7 @@ where
 
                 Poll::Ready(Ok(response))
             }
-            KindProj::Error { gov_error } => Poll::Ready(Err(Box::new(gov_error.to_owned()))),
+            KindProj::Error { gov_error } => Poll::Ready(Ok(gov_error.as_response())),
         }
     }
 }
@@ -216,16 +210,16 @@ impl<K, S, ReqBody, ResBody> Service<Request<ReqBody>>
 where
     K: KeyExtractor,
     S: Service<Request<ReqBody>, Response = Response<ResBody>>,
-    S::Error: Into<BoxError>,
+    ResBody: From<String>,
 {
     type Response = S::Response;
-    type Error = BoxError;
+    type Error = S::Error;
     type Future = ResponseFuture<S::Future>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         // Our middleware doesn't care about backpressure so its ready as long
         // as the inner service is ready.
-        self.inner.poll_ready(cx).map_err(Into::into)
+        self.inner.poll_ready(cx)
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
