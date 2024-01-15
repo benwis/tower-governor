@@ -1,9 +1,8 @@
-use axum::{error_handling::HandleErrorLayer, routing::get, BoxError, Router};
+use axum::{routing::get, Router};
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::net::TcpListener;
-use tower::ServiceBuilder;
-use tower_governor::{errors::display_error, governor::GovernorConfigBuilder, GovernorLayer};
+use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 
 async fn hello() -> &'static str {
     "Hello world"
@@ -42,18 +41,10 @@ async fn main() {
     let app = Router::new()
         // `GET /` goes to `root`
         .route("/", get(hello))
-        .layer(
-            ServiceBuilder::new()
-                // this middleware goes above `GovernorLayer` because it will receive
-                // errors returned by `GovernorLayer`
-                .layer(HandleErrorLayer::new(|e: BoxError| async move {
-                    display_error(e)
-                }))
-                .layer(GovernorLayer {
-                    // We can leak this because it is created once and then
-                    config: Box::leak(governor_conf),
-                }),
-        );
+        .layer(GovernorLayer {
+            // We can leak this because it is created once and then
+            config: Box::leak(governor_conf),
+        });
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`

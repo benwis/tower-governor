@@ -1,9 +1,8 @@
-use axum::{error_handling::HandleErrorLayer, routing::get, Router};
-use tower::{BoxError, ServiceBuilder};
+use axum::{routing::get, Router};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::{errors::display_error, governor::GovernorConfigBuilder, GovernorLayer};
+use crate::{governor::GovernorConfigBuilder, GovernorLayer};
 
 #[tokio::main]
 async fn _main() {
@@ -44,28 +43,21 @@ fn app() -> Router {
             "/",
             get(|| async { "Hello, World!" }).post(|| async { "Hello, Post World!" }),
         )
-        .layer(
-            ServiceBuilder::new()
-                // this middleware goes above `GovernorLayer` because it will receive
-                // errors returned by `GovernorLayer`
-                .layer(HandleErrorLayer::new(|e: BoxError| async move {
-                    display_error(e)
-                }))
-                .layer(GovernorLayer {
-                    config: Box::leak(config),
-                }),
-        )
+        .layer(GovernorLayer {
+            config: Box::leak(config),
+        })
         .layer(TraceLayer::new_for_http())
 }
 
 #[cfg(test)]
 mod governor_tests {
     use super::*;
-    use axum::http;
+    use axum::{body, http};
     use reqwest::header::HeaderName;
     use reqwest::StatusCode;
     use std::net::SocketAddr;
     use tokio::net::TcpListener;
+    use tower::ServiceExt;
 
     #[tokio::test]
     async fn hello_world() {
@@ -200,17 +192,9 @@ mod governor_tests {
                     "/",
                     get(|| async { "Hello, World!" }).post(|| async { "Hello, Post World!" }),
                 )
-                .layer(
-                    ServiceBuilder::new()
-                        // this middleware goes above `GovernorLayer` because it will receive
-                        // errors returned by `GovernorLayer`
-                        .layer(HandleErrorLayer::new(|e: BoxError| async move {
-                            display_error(e)
-                        }))
-                        .layer(GovernorLayer {
-                            config: Box::leak(config),
-                        }),
-                )
+                .layer(GovernorLayer {
+                    config: Box::leak(config),
+                })
                 .layer(TraceLayer::new_for_http());
             tx.send(()).unwrap();
             axum::serve(
@@ -272,17 +256,9 @@ mod governor_tests {
                     "/",
                     get(|| async { "Hello, World!" }).post(|| async { "Hello, Post World!" }),
                 )
-                .layer(
-                    ServiceBuilder::new()
-                        // this middleware goes above `GovernorLayer` because it will receive
-                        // errors returned by `GovernorLayer`
-                        .layer(HandleErrorLayer::new(|e: BoxError| async move {
-                            display_error(e)
-                        }))
-                        .layer(GovernorLayer {
-                            config: Box::leak(config),
-                        }),
-                )
+                .layer(GovernorLayer {
+                    config: Box::leak(config),
+                })
                 .layer(TraceLayer::new_for_http());
             tx.send(()).unwrap();
             axum::serve(
@@ -310,7 +286,7 @@ mod governor_tests {
             res.headers()
                 .get(HeaderName::from_static("x-ratelimit-remaining"))
                 .unwrap(),
-            "0" //TODO: Should this be 1?!?
+            "1"
         );
         assert!(res
             .headers()
@@ -458,17 +434,9 @@ mod governor_tests {
                     "/",
                     get(|| async { "Hello, World!" }).post(|| async { "Hello, Post World!" }),
                 )
-                .layer(
-                    ServiceBuilder::new()
-                        // this middleware goes above `GovernorLayer` because it will receive
-                        // errors returned by `GovernorLayer`
-                        .layer(HandleErrorLayer::new(|e: BoxError| async move {
-                            display_error(e)
-                        }))
-                        .layer(GovernorLayer {
-                            config: Box::leak(config),
-                        }),
-                )
+                .layer(GovernorLayer {
+                    config: Box::leak(config),
+                })
                 .layer(TraceLayer::new_for_http());
             tx.send(()).unwrap();
             axum::serve(
@@ -496,7 +464,7 @@ mod governor_tests {
             res.headers()
                 .get(HeaderName::from_static("x-ratelimit-remaining"))
                 .unwrap(),
-            "0" //TODO: Should this be 1?!?
+            "1"
         );
         assert!(res
             .headers()
@@ -583,5 +551,43 @@ mod governor_tests {
 
         let body = res.text().await.unwrap();
         assert_eq!(&body, "Hello, Post World!");
+    }
+
+    #[tokio::test]
+    async fn test_error_handler() {
+        let config = Box::new(
+            crate::governor::GovernorConfigBuilder::default()
+                .per_second(10)
+                .burst_size(1)
+                .error_handler(|_| {
+                    http::Response::builder()
+                        .status(http::StatusCode::IM_A_TEAPOT)
+                        .body(String::from("a custom error string"))
+                        .unwrap()
+                })
+                .finish()
+                .unwrap(),
+        );
+
+        let app = Router::new()
+            .route("/", get(|| async { "Hello, World!" }))
+            .layer(GovernorLayer {
+                config: Box::leak(config),
+            })
+            .layer(TraceLayer::new_for_http());
+
+        let req = || http::Request::new(body::Body::empty());
+
+        let _ = app.clone().oneshot(req()).await.unwrap();
+
+        let res = app.oneshot(req()).await.unwrap();
+
+        // second response should match the response produced by GovernorConfigBuilder::error_handler
+
+        assert_eq!(res.status(), http::StatusCode::IM_A_TEAPOT);
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(body.as_ref(), b"a custom error string");
     }
 }
