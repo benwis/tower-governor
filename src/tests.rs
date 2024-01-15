@@ -285,7 +285,7 @@ mod governor_tests {
             res.headers()
                 .get(HeaderName::from_static("x-ratelimit-remaining"))
                 .unwrap(),
-            "1" //TODO: Should this be 1?!?
+            "1"
         );
         assert!(res
             .headers()
@@ -463,7 +463,7 @@ mod governor_tests {
             res.headers()
                 .get(HeaderName::from_static("x-ratelimit-remaining"))
                 .unwrap(),
-            "1" //TODO: Should this be 1?!?
+            "1"
         );
         assert!(res
             .headers()
