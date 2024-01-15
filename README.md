@@ -80,8 +80,8 @@ async fn main() {
         // `GET /` goes to `root`
         .route("/", get(hello))
         .layer(GovernorLayer {
-                    // We can leak this because it is created once and then
-                    config: Box::leak(governor_conf),
+            // We can leak this because it is created once and then
+            config: Box::leak(governor_conf),
         });
 
     // run our app with hyper
