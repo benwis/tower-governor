@@ -10,7 +10,6 @@ use crate::governor::{Governor, GovernorConfig};
 use ::governor::clock::{Clock, DefaultClock, QuantaInstant};
 use ::governor::middleware::{NoOpMiddleware, RateLimitingMiddleware, StateInformationMiddleware};
 pub use errors::GovernorError;
-use futures_core::ready;
 use http::response::Response;
 
 use http::header::{HeaderName, HeaderValue};
@@ -19,7 +18,7 @@ use http::HeaderMap;
 use key_extractor::KeyExtractor;
 use pin_project::pin_project;
 use std::task::{Context, Poll};
-use std::{future::Future, pin::Pin};
+use std::{future::Future, pin::Pin, task::ready};
 use tower::{Layer, Service};
 
 /// The Layer type that implements tower::Layer and is passed into `.layer()`
