@@ -131,6 +131,63 @@ async fn main() {
 
  Check out the [custom_key_bearer](https://github.com/benwis/tower-governor/blob/main/examples/src/custom_key_bearer.rs) example for more information.
 
+ # Crate feature flags
+ 
+ tower-governor uses [feature flags](https://doc.rust-lang.org/cargo/reference/manifest.html#the-features-section) to reduce the amount of compiled code and it is possible to enable certain features over others. Below is a list of the available feature flags:
+ - `axum`: Enables support for axum web framework
+ - `tracing`: Enables tracing output for this middleware
+
+ ### Example for no-default-features
+
+ - Disabling [`default` feature](https://doc.rust-lang.org/cargo/reference/features.html#the-default-feature) will change behavior of [PeerIpKeyExtractor] and [SmartIpKeyExtractor]: These two key extractors will expect [SocketAddr] type from [Request]'s [Extensions]. 
+ - Fail to provide valid `SocketAddr` could result in [GovernorError::UnableToExtractKey].
+
+ Cargo.toml
+ ```toml
+ [dependencies]
+ tower-governor = { version = "0.3", default-features = false }
+ ```
+ main.rs
+ ```rust
+ use std::{convert::Infallible, net::SocketAddr};
+
+ use http::{Request, Response};
+ use tower::{service_fn, ServiceBuilder, ServiceExt};
+ use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
+ # async fn service() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+
+ // service function expecting rate limiting by governor.
+ let service = service_fn(|_: Request<()>| async { 
+    Ok::<_, Infallible>(Response::new(String::from("mock response"))) 
+ });
+ 
+ let config = Box::new(GovernorConfigBuilder::default().finish().unwrap());
+
+ // build service with governor layer
+ let service = ServiceBuilder::new()
+    // the caller of service must provide SocketAddr to governor layer middleware
+    .map_request(|(mut req, addr): (Request<()>, SocketAddr)| {
+        // insert SocketAddr to request's extensions and governor is expecting it.
+        req.extensions_mut().insert(addr);
+        req
+    })
+    .layer(GovernorLayer { config: Box::leak(config) })
+    .service(service);
+ 
+ // mock client socket addr and http request.
+ let addr = "127.0.0.1:12345".parse().unwrap();
+ let req = Request::default();
+
+ // execute service
+ service.oneshot((req, addr)).await?;
+ # Ok(())
+ # }
+ ```
+
+ [SocketAddr]: std::net::SocketAddr
+ [Request]: http::Request
+ [Extensions]: http::Extensions
+
 
  # Add x-ratelimit headers
 

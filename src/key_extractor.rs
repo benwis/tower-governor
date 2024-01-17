@@ -1,5 +1,4 @@
 use crate::errors::GovernorError;
-use axum::extract::ConnectInfo;
 use forwarded_header_value::{ForwardedHeaderValue, Identifier};
 use http::request::Request;
 use http::{header::FORWARDED, HeaderMap};
@@ -74,10 +73,7 @@ impl KeyExtractor for PeerIpKeyExtractor {
 
     //type Key: Clone + Hash + Eq;
     fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, GovernorError> {
-        req.extensions()
-            .get::<ConnectInfo<SocketAddr>>()
-            .map(|ConnectInfo(addr)| addr.ip())
-            .ok_or(GovernorError::UnableToExtractKey)
+        maybe_connect_info(req).ok_or(GovernorError::UnableToExtractKey)
     }
 
     #[cfg(feature = "tracing")]
@@ -163,9 +159,16 @@ fn maybe_forwarded(headers: &HeaderMap) -> Option<IpAddr> {
     })
 }
 
+#[cfg(feature = "axum")]
 /// Looks in `ConnectInfo` extension
 fn maybe_connect_info<T>(req: &Request<T>) -> Option<IpAddr> {
     req.extensions()
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|ConnectInfo(addr)| addr.ip())
+        .get::<axum::extract::ConnectInfo<SocketAddr>>()
+        .map(|addr| addr.ip())
+}
+
+#[cfg(not(feature = "axum"))]
+/// Looks in `ConnectInfo` extension
+fn maybe_connect_info<T>(req: &Request<T>) -> Option<IpAddr> {
+    req.extensions().get::<SocketAddr>().map(|addr| addr.ip())
 }
