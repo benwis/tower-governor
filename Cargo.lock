@@ -1223,15 +1223,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signal-hook-registry"
-version = "1.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8229b473baa5980ac72ef434c4415e70c4b5e71b423043adb4ba059f89c99a1"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "slab"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1373,9 +1364,7 @@ dependencies = [
  "libc",
  "mio",
  "num_cpus",
- "parking_lot",
  "pin-project-lite",
- "signal-hook-registry",
  "socket2 0.5.3",
  "tokio-macros",
  "windows-sys",
@@ -1464,12 +1453,10 @@ checksum = "b6bc1c9ce2b5135ac7f93c72918fc37feb872bdc6a5533a8b85eb4b86bfdae52"
 
 [[package]]
 name = "tower_governor"
-version = "0.2.0"
+version = "0.3.1"
 dependencies = [
  "axum",
  "forwarded-header-value",
- "futures",
- "futures-core",
  "governor",
  "http 1.0.0",
  "hyper 0.14.27",
@@ -1480,7 +1467,6 @@ dependencies = [
  "tokio",
  "tower",
  "tower-http",
- "tower-layer",
  "tracing",
  "tracing-subscriber",
 ]
