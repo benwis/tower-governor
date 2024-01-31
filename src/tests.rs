@@ -562,7 +562,7 @@ mod governor_tests {
                 .error_handler(|_| {
                     http::Response::builder()
                         .status(http::StatusCode::IM_A_TEAPOT)
-                        .body(String::from("a custom error string"))
+                        .body(axum::body::Body::from("a custom error string"))
                         .unwrap()
                 })
                 .finish()
