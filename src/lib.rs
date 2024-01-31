@@ -9,6 +9,7 @@ pub mod key_extractor;
 use crate::governor::{Governor, GovernorConfig};
 use ::governor::clock::{Clock, DefaultClock, QuantaInstant};
 use ::governor::middleware::{NoOpMiddleware, RateLimitingMiddleware, StateInformationMiddleware};
+use axum::body::Body;
 pub use errors::GovernorError;
 use http::response::Response;
 
@@ -51,11 +52,10 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> Clone for Govern
     }
 }
 // Implement tower::Service for Governor
-impl<K, S, ReqBody, ResBody> Service<Request<ReqBody>> for Governor<K, NoOpMiddleware, S>
+impl<K, S, ReqBody> Service<Request<ReqBody>> for Governor<K, NoOpMiddleware, S>
 where
     K: KeyExtractor,
-    S: Service<Request<ReqBody>, Response = Response<ResBody>>,
-    ResBody: From<String>,
+    S: Service<Request<ReqBody>, Response = Response<Body>>,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -160,16 +160,15 @@ enum Kind<F> {
         future: F,
     },
     Error {
-        error_response: Option<Response<String>>,
+        error_response: Option<Response<Body>>,
     },
 }
 
-impl<F, B, E> Future for ResponseFuture<F>
+impl<F, E> Future for ResponseFuture<F>
 where
-    F: Future<Output = Result<Response<B>, E>>,
-    B: From<String>,
+    F: Future<Output = Result<Response<Body>, E>>,
 {
-    type Output = Result<Response<B>, E>;
+    type Output = Result<Response<Body>, E>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project().inner.project() {
@@ -207,20 +206,18 @@ where
             }
             KindProj::Error { error_response } => Poll::Ready(Ok(error_response.take().expect("
                 <Governor as Service<Request<_>>>::call must produce Response<String> when GovernorError occurs.
-            ").map(B::from))),
+            "))),
         }
     }
 }
 
 // Implementation of Service for Governor using the StateInformationMiddleware.
-impl<K, S, ReqBody, ResBody> Service<Request<ReqBody>>
-    for Governor<K, StateInformationMiddleware, S>
+impl<K, S, ReqBody> Service<Request<ReqBody>> for Governor<K, StateInformationMiddleware, S>
 where
     K: KeyExtractor,
-    S: Service<Request<ReqBody>, Response = Response<ResBody>>,
+    S: Service<Request<ReqBody>, Response = Response<Body>>,
     // Body type of response must impl From<String> trait to convert potential error
     // produced by governor to re
-    ResBody: From<String>,
 {
     type Response = S::Response;
     type Error = S::Error;

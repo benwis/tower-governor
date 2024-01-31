@@ -2,6 +2,7 @@ use crate::{
     key_extractor::{KeyExtractor, PeerIpKeyExtractor},
     GovernorError,
 };
+use axum::body::Body;
 use governor::{
     clock::{DefaultClock, QuantaInstant},
     middleware::{NoOpMiddleware, RateLimitingMiddleware, StateInformationMiddleware},
@@ -60,7 +61,7 @@ pub struct GovernorConfigBuilder<K: KeyExtractor, M: RateLimitingMiddleware<Quan
 
 // function for handling GovernorError and produce valid http Response type.
 #[derive(Clone)]
-struct ErrorHandler(Arc<dyn Fn(GovernorError) -> Response<String> + Send + Sync>);
+struct ErrorHandler(Arc<dyn Fn(GovernorError) -> Response<Body> + Send + Sync>);
 
 impl Default for ErrorHandler {
     fn default() -> Self {
@@ -102,13 +103,13 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBu
     ///     .error_handler(|mut error| {
     ///         // match against GovernorError and produce customized Response type.
     ///         match error {
-    ///             _ => Response::new(String::from("some error"))
+    ///             _ => Response::new("some error")
     ///         }
     ///     });
     /// ```
     pub fn error_handler<F>(&mut self, func: F) -> &mut Self
     where
-        F: Fn(GovernorError) -> Response<String> + Send + Sync + 'static,
+        F: Fn(GovernorError) -> Response<Body> + Send + Sync + 'static,
     {
         self.error_handler = ErrorHandler(Arc::new(func));
         self
@@ -354,9 +355,7 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S> Governor<K, M
         }
     }
 
-    pub(crate) fn error_handler(
-        &self,
-    ) -> &(dyn Fn(GovernorError) -> Response<String> + Send + Sync) {
+    pub(crate) fn error_handler(&self) -> &(dyn Fn(GovernorError) -> Response<Body> + Send + Sync) {
         &*self.error_handler.0
     }
 }
