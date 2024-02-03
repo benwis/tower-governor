@@ -103,7 +103,7 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBu
     ///     .error_handler(|mut error| {
     ///         // match against GovernorError and produce customized Response type.
     ///         match error {
-    ///             _ => Response::new("some error")
+    ///             _ => Response::new("some error".into())
     ///         }
     ///     });
     /// ```
