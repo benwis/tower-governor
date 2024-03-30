@@ -18,20 +18,21 @@ use http::request::Request;
 use http::HeaderMap;
 use key_extractor::KeyExtractor;
 use pin_project::pin_project;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::{future::Future, pin::Pin, task::ready};
 use tower::{Layer, Service};
 
 /// The Layer type that implements tower::Layer and is passed into `.layer()`
-pub struct GovernorLayer<'a, K, M>
+pub struct GovernorLayer<K, M>
 where
     K: KeyExtractor,
     M: RateLimitingMiddleware<QuantaInstant>,
 {
-    pub config: &'a GovernorConfig<K, M>,
+    pub config: Arc<GovernorConfig<K, M>>,
 }
 
-impl<K, M, S> Layer<S> for GovernorLayer<'_, K, M>
+impl<K, M, S> Layer<S> for GovernorLayer<K, M>
 where
     K: KeyExtractor,
     M: RateLimitingMiddleware<QuantaInstant>,
@@ -39,15 +40,15 @@ where
     type Service = Governor<K, M, S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        Governor::new(inner, self.config)
+        Governor::new(inner, &self.config)
     }
 }
 
 /// https://stegosaurusdormant.com/understanding-derive-clone/
-impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> Clone for GovernorLayer<'_, K, M> {
+impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> Clone for GovernorLayer<K, M> {
     fn clone(&self) -> Self {
         Self {
-            config: self.config,
+            config: self.config.clone(),
         }
     }
 }

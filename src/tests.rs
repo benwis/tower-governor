@@ -1,4 +1,5 @@
 use axum::{routing::get, Router};
+use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -29,7 +30,7 @@ async fn _main() {
 /// without having to create an HTTP server.
 #[allow(dead_code)]
 fn app() -> Router {
-    let config = Box::new(
+    let config = Arc::new(
         GovernorConfigBuilder::default()
             .per_millisecond(90)
             .burst_size(2)
@@ -43,9 +44,7 @@ fn app() -> Router {
             "/",
             get(|| async { "Hello, World!" }).post(|| async { "Hello, Post World!" }),
         )
-        .layer(GovernorLayer {
-            config: Box::leak(config),
-        })
+        .layer(GovernorLayer { config })
         .layer(TraceLayer::new_for_http())
 }
 
@@ -177,7 +176,7 @@ mod governor_tests {
 
         let (tx, rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
-            let config = Box::new(
+            let config = Arc::new(
                 GovernorConfigBuilder::default()
                     .per_millisecond(90)
                     .burst_size(2)
@@ -192,9 +191,7 @@ mod governor_tests {
                     "/",
                     get(|| async { "Hello, World!" }).post(|| async { "Hello, Post World!" }),
                 )
-                .layer(GovernorLayer {
-                    config: Box::leak(config),
-                })
+                .layer(GovernorLayer { config })
                 .layer(TraceLayer::new_for_http());
             tx.send(()).unwrap();
             axum::serve(
@@ -241,7 +238,7 @@ mod governor_tests {
 
         let (tx, rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
-            let config = Box::new(
+            let config = Arc::new(
                 GovernorConfigBuilder::default()
                     .per_millisecond(90)
                     .burst_size(2)
@@ -256,9 +253,7 @@ mod governor_tests {
                     "/",
                     get(|| async { "Hello, World!" }).post(|| async { "Hello, Post World!" }),
                 )
-                .layer(GovernorLayer {
-                    config: Box::leak(config),
-                })
+                .layer(GovernorLayer { config })
                 .layer(TraceLayer::new_for_http());
             tx.send(()).unwrap();
             axum::serve(
@@ -418,7 +413,7 @@ mod governor_tests {
 
         let (tx, rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
-            let config = Box::new(
+            let config = Arc::new(
                 GovernorConfigBuilder::default()
                     .per_millisecond(90)
                     .burst_size(2)
@@ -434,9 +429,7 @@ mod governor_tests {
                     "/",
                     get(|| async { "Hello, World!" }).post(|| async { "Hello, Post World!" }),
                 )
-                .layer(GovernorLayer {
-                    config: Box::leak(config),
-                })
+                .layer(GovernorLayer { config })
                 .layer(TraceLayer::new_for_http());
             tx.send(()).unwrap();
             axum::serve(
@@ -555,7 +548,7 @@ mod governor_tests {
 
     #[tokio::test]
     async fn test_error_handler() {
-        let config = Box::new(
+        let config = Arc::new(
             crate::governor::GovernorConfigBuilder::default()
                 .per_second(10)
                 .burst_size(1)
@@ -571,9 +564,7 @@ mod governor_tests {
 
         let app = Router::new()
             .route("/", get(|| async { "Hello, World!" }))
-            .layer(GovernorLayer {
-                config: Box::leak(config),
-            })
+            .layer(GovernorLayer { config })
             .layer(TraceLayer::new_for_http());
 
         let req = || http::Request::new(body::Body::empty());
