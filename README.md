@@ -35,6 +35,7 @@
  ```rust,no_run
 use axum::{error_handling::HandleErrorLayer, routing::get, BoxError, Router};
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
@@ -56,7 +57,7 @@ async fn main() {
     // and replenishes one element every two seconds
     // We Box it because Axum 0.6 requires all Layers to be Clone
     // and thus we need a static reference to it
-    let governor_conf = Box::new(
+    let governor_conf = Arc::new(
         GovernorConfigBuilder::default()
             .per_second(2)
             .burst_size(5)
@@ -80,8 +81,7 @@ async fn main() {
         // `GET /` goes to `root`
         .route("/", get(hello))
         .layer(GovernorLayer {
-            // We can leak this because it is created once and then
-            config: Box::leak(governor_conf),
+            config: governor_conf,
         });
 
     // run our app with hyper
@@ -150,6 +150,7 @@ async fn main() {
  main.rs
  ```rust
  use std::{convert::Infallible, net::SocketAddr};
+ use std::sync::Arc;
 
  use http::{Request, Response};
  use tower::{service_fn, ServiceBuilder, ServiceExt};
@@ -161,7 +162,7 @@ async fn main() {
     Ok::<_, Infallible>(Response::new(String::from("mock response"))) 
  });
  
- let config = Box::new(GovernorConfigBuilder::default().finish().unwrap());
+ let config = Arc::new(GovernorConfigBuilder::default().finish().unwrap());
 
  // build service with governor layer
  let service = ServiceBuilder::new()
@@ -171,7 +172,7 @@ async fn main() {
         req.extensions_mut().insert(addr);
         req
     })
-    .layer(GovernorLayer { config: Box::leak(config) })
+    .layer(GovernorLayer { config })
     .service(service);
  
  // mock client socket addr and http request.

@@ -1,5 +1,6 @@
 use axum::{routing::get, Router};
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
@@ -20,7 +21,7 @@ async fn main() {
     // and replenishes one element every two seconds
     // We Box it because Axum 0.6 requires all Layers to be Clone
     // and thus we need a static reference to it
-    let governor_conf = Box::new(
+    let governor_conf = Arc::new(
         GovernorConfigBuilder::default()
             .per_second(2)
             .burst_size(5)
@@ -42,8 +43,7 @@ async fn main() {
         // `GET /` goes to `root`
         .route("/", get(hello))
         .layer(GovernorLayer {
-            // We can leak this because it is created once and then
-            config: Box::leak(governor_conf),
+            config: governor_conf,
         });
 
     // run our app with hyper

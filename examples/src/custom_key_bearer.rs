@@ -2,6 +2,7 @@ use axum::{routing::get, Router};
 use http::{request::Request, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_governor::{
     errors::GovernorError, governor::GovernorConfigBuilder, key_extractor::KeyExtractor,
@@ -48,7 +49,7 @@ async fn main() {
 
     // Allow bursts with up to five requests per IP address
     // and replenishes one element every two seconds
-    let governor_conf = Box::new(
+    let governor_conf = Arc::new(
         GovernorConfigBuilder::default()
             .per_second(20)
             .burst_size(5)
@@ -63,7 +64,7 @@ async fn main() {
         // `GET /` goes to `root`
         .route("/", get(hello))
         .layer(GovernorLayer {
-            config: Box::leak(governor_conf),
+            config: governor_conf,
         });
 
     // run our app with hyper
