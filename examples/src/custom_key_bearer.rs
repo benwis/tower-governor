@@ -48,7 +48,7 @@ async fn main() {
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
     // Allow bursts with up to five requests per IP address
-    // and replenishes one element every two seconds
+    // and replenishes one element every twenty seconds
     let governor_conf = Arc::new(
         GovernorConfigBuilder::default()
             .per_second(20)
