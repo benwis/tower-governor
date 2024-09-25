@@ -18,7 +18,7 @@ governor = "0.6.0"
 http = "1.0.0"
 pin-project = "1.0.12"
 thiserror = "1.0.37"
-tower = "0.4.13"
+tower = "0.5.1"
 tracing = { version = "0.1.37", features = ["attributes"] }
 
 axum = { version = "0.7", optional = true }
@@ -28,8 +28,8 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 hyper = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
 serde_json = "1.0.89"
-tower = { version = "0.4", features = ["util"] }
-tower-http = { version = "0.5", features = ["trace"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["trace"] }
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 
 [features]
