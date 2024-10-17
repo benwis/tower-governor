@@ -22,7 +22,9 @@ pub enum GovernorError {
 }
 
 impl GovernorError {
-    pub(crate) fn as_response<ResB>(&mut self) -> Response<ResB>
+    /// Convert self into a "default response", as if no error handler was set using
+    /// [`GovernorConfigBuilder::error_handler`].
+    pub fn as_response<ResB>(&mut self) -> Response<ResB>
     where
         ResB: From<String>,
     {
