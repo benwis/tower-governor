@@ -192,7 +192,7 @@ async fn main() {
 
  # Add x-ratelimit headers
 
- By default, `x-ratelimit-after` is enabled but if you want to enable `x-ratelimit-limit`, `x-ratelimit-whitelisted` and `x-ratelimit-remaining` use the [`.use_headers()`](https://docs.rs/tower_governor/latest/tower_governor/governor/struct.GovernorConfigBuilder.html#method.use_headers) method on your GovernorConfig.
+ By default, `x-ratelimit-after` and `retry-after` headers are being sent. If you want to add `x-ratelimit-limit`, `x-ratelimit-whitelisted` and `x-ratelimit-remaining` use the [`.use_headers()`](https://docs.rs/tower_governor/latest/tower_governor/governor/struct.GovernorConfigBuilder.html#method.use_headers) method on your GovernorConfig.
 
 
  # Error Handling
