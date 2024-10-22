@@ -14,7 +14,7 @@ categories = ["web-programming::http-server"]
 
 [dependencies]
 forwarded-header-value = "0.1.1"
-governor = "0.6.0"
+governor = "0.7.0"
 http = "1.0.0"
 pin-project = "1.0.12"
 thiserror = "1.0.37"
