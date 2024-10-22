@@ -159,7 +159,7 @@ async fn main() {
 
  // service function expecting rate limiting by governor.
  let service = service_fn(|_: Request<()>| async { 
-    Ok::<_, Infallible>(Response::new(String::from("mock response"))) 
+    Ok::<_, Infallible>(Response::new(axum::body::Body::from("mock response"))) 
  });
  
  let config = Arc::new(GovernorConfigBuilder::default().finish().unwrap());
