@@ -14,10 +14,10 @@ categories = ["web-programming::http-server"]
 
 [dependencies]
 forwarded-header-value = "0.1.1"
-governor = "0.7.0"
+governor = "0.8.0"
 http = "1.0.0"
 pin-project = "1.0.12"
-thiserror = "1.0.37"
+thiserror = "2.0.0"
 tower = "0.5.1"
 tracing = { version = "0.1.37", features = ["attributes"] }
 
