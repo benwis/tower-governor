@@ -21,7 +21,7 @@ thiserror = "2.0.0"
 tower = "0.5.1"
 tracing = { version = "0.1.37", features = ["attributes"] }
 
-axum = { version = "0.7", optional = true }
+axum = { version = "0.8", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
