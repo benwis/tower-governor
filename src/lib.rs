@@ -7,7 +7,7 @@ pub mod errors;
 pub mod governor;
 pub mod key_extractor;
 use crate::governor::{Governor, GovernorConfig};
-use ::governor::clock::{Clock, DefaultClock, QuantaInstant};
+use ::governor::clock::Clock;
 use ::governor::middleware::{NoOpMiddleware, RateLimitingMiddleware, StateInformationMiddleware};
 use axum::body::Body;
 pub use errors::GovernorError;
@@ -24,20 +24,22 @@ use std::{future::Future, pin::Pin, task::ready};
 use tower::{Layer, Service};
 
 /// The Layer type that implements tower::Layer and is passed into `.layer()`
-pub struct GovernorLayer<K, M>
+pub struct GovernorLayer<K, M, C>
 where
     K: KeyExtractor,
-    M: RateLimitingMiddleware<QuantaInstant>,
+    M: RateLimitingMiddleware<C::Instant>,
+    C: Clock + Clone + std::fmt::Debug,
 {
-    pub config: Arc<GovernorConfig<K, M>>,
+    pub config: Arc<GovernorConfig<K, M, C>>,
 }
 
-impl<K, M, S> Layer<S> for GovernorLayer<K, M>
+impl<K, M, S, C> Layer<S> for GovernorLayer<K, M, C>
 where
     K: KeyExtractor,
-    M: RateLimitingMiddleware<QuantaInstant>,
+    M: RateLimitingMiddleware<C::Instant>,
+    C: Clock + Clone + std::fmt::Debug,
 {
-    type Service = Governor<K, M, S>;
+    type Service = Governor<K, M, S, C>;
 
     fn layer(&self, inner: S) -> Self::Service {
         Governor::new(inner, &self.config)
@@ -45,18 +47,25 @@ where
 }
 
 /// https://stegosaurusdormant.com/understanding-derive-clone/
-impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> Clone for GovernorLayer<K, M> {
+impl<
+        K: KeyExtractor,
+        M: RateLimitingMiddleware<C::Instant>,
+        C: Clock + Clone + std::fmt::Debug,
+    > Clone for GovernorLayer<K, M, C>
+{
     fn clone(&self) -> Self {
         Self {
             config: self.config.clone(),
         }
     }
 }
+
 // Implement tower::Service for Governor
-impl<K, S, ReqBody> Service<Request<ReqBody>> for Governor<K, NoOpMiddleware, S>
+impl<K, S, ReqBody, C> Service<Request<ReqBody>> for Governor<K, NoOpMiddleware<C::Instant>, S, C>
 where
     K: KeyExtractor,
     S: Service<Request<ReqBody>, Response = Response<Body>>,
+    C: Clock + Clone + std::fmt::Debug,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -89,7 +98,7 @@ where
 
                 Err(negative) => {
                     let wait_time = negative
-                        .wait_time_from(DefaultClock::default().now())
+                        .wait_time_from(self.limiter.clock().now())
                         .as_secs();
 
                     #[cfg(feature = "tracing")]
@@ -214,10 +223,11 @@ where
 }
 
 // Implementation of Service for Governor using the StateInformationMiddleware.
-impl<K, S, ReqBody> Service<Request<ReqBody>> for Governor<K, StateInformationMiddleware, S>
+impl<K, S, ReqBody, C> Service<Request<ReqBody>> for Governor<K, StateInformationMiddleware, S, C>
 where
     K: KeyExtractor,
     S: Service<Request<ReqBody>, Response = Response<Body>>,
+    C: Clock + Clone + std::fmt::Debug,
     // Body type of response must impl From<String> trait to convert potential error
     // produced by governor to re
 {
@@ -258,7 +268,7 @@ where
 
                 Err(negative) => {
                     let wait_time = negative
-                        .wait_time_from(DefaultClock::default().now())
+                        .wait_time_from(self.limiter.clock().now())
                         .as_secs();
 
                     #[cfg(feature = "tracing")]

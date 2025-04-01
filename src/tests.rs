@@ -1,4 +1,5 @@
 use axum::{routing::get, Router};
+use governor::clock::{Clock, DefaultClock};
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -21,7 +22,7 @@ async fn _main() {
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
-    axum::serve(listener, app().into_make_service())
+    axum::serve(listener, app(DefaultClock::default()).into_make_service())
         .await
         .unwrap();
 }
@@ -29,9 +30,9 @@ async fn _main() {
 /// Having a function that produces our app makes it easy to call it from tests
 /// without having to create an HTTP server.
 #[allow(dead_code)]
-fn app() -> Router {
+fn app(clock: impl Clock + Clone + std::fmt::Debug + Send + Sync + 'static) -> Router {
     let config = Arc::new(
-        GovernorConfigBuilder::default()
+        GovernorConfigBuilder::default_with_clock(clock)
             .per_millisecond(90)
             .burst_size(2)
             .finish()
@@ -52,6 +53,7 @@ fn app() -> Router {
 mod governor_tests {
     use super::*;
     use axum::{body, http};
+    use governor::clock::FakeRelativeClock;
     use reqwest::header::HeaderName;
     use reqwest::StatusCode;
     use std::net::SocketAddr;
@@ -63,9 +65,11 @@ mod governor_tests {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
 
+        let clock = FakeRelativeClock::default();
+
         let (tx, rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
-            let app = app();
+            let app = app(clock);
             tx.send(()).unwrap();
             axum::serve(
                 listener,
@@ -112,9 +116,12 @@ mod governor_tests {
         let addr = listener.local_addr().unwrap();
         let url = format!("http://{}", addr);
 
+        let clock = FakeRelativeClock::default();
+        let clock_clone = clock.clone();
+
         let (tx, rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
-            let app = app();
+            let app = app(clock_clone);
             tx.send(()).unwrap();
             axum::serve(
                 listener,
@@ -147,7 +154,7 @@ mod governor_tests {
 
         // Replenish one element by waiting for >90ms
         let sleep_time = std::time::Duration::from_millis(100);
-        std::thread::sleep(sleep_time);
+        clock.advance(sleep_time);
 
         // First request after reset
         let res = client.get(&url).send().await.unwrap();
@@ -232,14 +239,16 @@ mod governor_tests {
     async fn test_server_use_headers() {
         use crate::governor::GovernorConfigBuilder;
 
+        let clock = FakeRelativeClock::default();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let url = format!("http://{}", addr);
 
+        let clock_clone = clock.clone();
         let (tx, rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
             let config = Arc::new(
-                GovernorConfigBuilder::default()
+                GovernorConfigBuilder::default_with_clock(clock_clone)
                     .per_millisecond(90)
                     .burst_size(2)
                     .use_headers()
@@ -345,7 +354,7 @@ mod governor_tests {
 
         // Replenish one element by waiting for >90ms
         let sleep_time = std::time::Duration::from_millis(100);
-        std::thread::sleep(sleep_time);
+        clock.advance(sleep_time);
 
         // First request after reset
         let res = client.get(&url).send().await.unwrap();

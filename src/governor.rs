@@ -4,7 +4,7 @@ use crate::{
 };
 use axum::body::Body;
 use governor::{
-    clock::{DefaultClock, QuantaInstant},
+    clock::{Clock, DefaultClock, QuantaInstant},
     middleware::{NoOpMiddleware, RateLimitingMiddleware, StateInformationMiddleware},
     state::keyed::DefaultKeyedStateStore,
     Quota, RateLimiter,
@@ -17,8 +17,7 @@ pub const DEFAULT_BURST_SIZE: u32 = 8;
 
 // Required by Governor's RateLimiter to share it across threads
 // See Governor User Guide: https://docs.rs/governor/0.6.0/governor/_guide/index.html
-pub type SharedRateLimiter<Key, M> =
-    Arc<RateLimiter<Key, DefaultKeyedStateStore<Key>, DefaultClock, M>>;
+pub type SharedRateLimiter<K, M, C> = Arc<RateLimiter<K, DefaultKeyedStateStore<K>, C, M>>;
 
 /// Helper struct for building a configuration for the governor middleware.
 ///
@@ -50,13 +49,34 @@ pub type SharedRateLimiter<Key, M> =
 ///     .unwrap();
 /// ```
 #[derive(Debug, Eq, Clone, PartialEq)]
-pub struct GovernorConfigBuilder<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> {
+pub struct GovernorConfigBuilder<
+    K: KeyExtractor,
+    M: RateLimitingMiddleware<C::Instant>,
+    C: Clock + Clone + std::fmt::Debug = DefaultClock,
+> {
     period: Duration,
     burst_size: u32,
     methods: Option<Vec<Method>>,
     key_extractor: K,
     error_handler: ErrorHandler,
     middleware: PhantomData<M>,
+    clock: C,
+}
+
+impl<C: Clock + Clone + std::fmt::Debug>
+    GovernorConfigBuilder<PeerIpKeyExtractor, NoOpMiddleware<C::Instant>, C>
+{
+    pub fn default_with_clock(clock: C) -> Self {
+        Self {
+            period: DEFAULT_PERIOD,
+            burst_size: DEFAULT_BURST_SIZE,
+            methods: None,
+            key_extractor: PeerIpKeyExtractor,
+            error_handler: ErrorHandler::default(),
+            middleware: PhantomData,
+            clock,
+        }
+    }
 }
 
 // function for handling GovernorError and produce valid http Response type.
@@ -93,7 +113,12 @@ impl Default for GovernorConfigBuilder<PeerIpKeyExtractor, NoOpMiddleware> {
     }
 }
 
-impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBuilder<K, M> {
+impl<
+        K: KeyExtractor,
+        M: RateLimitingMiddleware<C::Instant>,
+        C: Clock + Clone + std::fmt::Debug,
+    > GovernorConfigBuilder<K, M, C>
+{
     /// Set handler function for handling [GovernorError]
     /// # Example
     /// ```rust
@@ -127,8 +152,10 @@ impl<M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBuilder<PeerIpKeyEx
             key_extractor: PeerIpKeyExtractor,
             error_handler: ErrorHandler::default(),
             middleware: PhantomData,
+            clock: DefaultClock::default(),
         }
     }
+
     /// Set the interval after which one element of the quota is replenished.
     ///
     /// **The interval must not be zero.**
@@ -169,7 +196,12 @@ impl<M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBuilder<PeerIpKeyEx
 }
 
 /// Sets configuration options when any Key Extractor is provided
-impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBuilder<K, M> {
+impl<
+        K: KeyExtractor,
+        M: RateLimitingMiddleware<C::Instant>,
+        C: Clock + Clone + std::fmt::Debug,
+    > GovernorConfigBuilder<K, M, C>
+{
     /// Set the interval after which one element of the quota is replenished.
     ///
     /// **The interval must not be zero.**
@@ -220,7 +252,7 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBu
     pub fn key_extractor<K2: KeyExtractor>(
         &mut self,
         key_extractor: K2,
-    ) -> GovernorConfigBuilder<K2, M> {
+    ) -> GovernorConfigBuilder<K2, M, C> {
         GovernorConfigBuilder {
             period: self.period,
             burst_size: self.burst_size,
@@ -228,8 +260,10 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBu
             key_extractor,
             error_handler: self.error_handler.clone(),
             middleware: PhantomData,
+            clock: self.clock.clone(),
         }
     }
+
     /// Set ratelimit headers to response, the headers is
     /// - `x-ratelimit-limit`       - Request limit
     /// - `x-ratelimit-remaining`   - The number of requests left for the time window
@@ -241,7 +275,7 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBu
     ///
     /// [`methods`]: crate::GovernorConfigBuilder::methods()
     /// [`use_headers`]: Self::use_headers
-    pub fn use_headers(&mut self) -> GovernorConfigBuilder<K, StateInformationMiddleware> {
+    pub fn use_headers(&mut self) -> GovernorConfigBuilder<K, StateInformationMiddleware, C> {
         GovernorConfigBuilder {
             period: self.period,
             burst_size: self.burst_size,
@@ -249,20 +283,23 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBu
             key_extractor: self.key_extractor.clone(),
             error_handler: self.error_handler.clone(),
             middleware: PhantomData,
+            clock: self.clock.clone(),
         }
     }
 
     /// Finish building the configuration and return the configuration for the middleware.
     /// Returns `None` if either burst size or period interval are zero.
-    pub fn finish(&mut self) -> Option<GovernorConfig<K, M>> {
+    pub fn finish(&mut self) -> Option<GovernorConfig<K, M, C>> {
         if self.burst_size != 0 && self.period.as_nanos() != 0 {
             Some(GovernorConfig {
                 key_extractor: self.key_extractor.clone(),
                 limiter: Arc::new(
-                    RateLimiter::keyed(
+                    RateLimiter::<_, _, _, M>::new(
                         Quota::with_period(self.period)
                             .unwrap()
                             .allow_burst(NonZeroU32::new(self.burst_size).unwrap()),
+                        DefaultKeyedStateStore::new(),
+                        self.clock.clone(),
                     )
                     .with_middleware::<M>(),
                 ),
@@ -277,15 +314,24 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBu
 
 #[derive(Debug, Clone)]
 /// Configuration for the Governor middleware.
-pub struct GovernorConfig<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> {
+pub struct GovernorConfig<
+    K: KeyExtractor,
+    M: RateLimitingMiddleware<C::Instant>,
+    C: Clock + Clone + std::fmt::Debug = DefaultClock,
+> {
     key_extractor: K,
-    limiter: SharedRateLimiter<K::Key, M>,
+    limiter: SharedRateLimiter<K::Key, M, C>,
     methods: Option<Vec<Method>>,
     error_handler: ErrorHandler,
 }
 
-impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfig<K, M> {
-    pub fn limiter(&self) -> &SharedRateLimiter<K::Key, M> {
+impl<
+        K: KeyExtractor,
+        M: RateLimitingMiddleware<C::Instant>,
+        C: Clock + Clone + std::fmt::Debug,
+    > GovernorConfig<K, M, C>
+{
+    pub fn limiter(&self) -> &SharedRateLimiter<K::Key, M, C> {
         &self.limiter
     }
 }
@@ -312,6 +358,7 @@ impl<M: RateLimitingMiddleware<QuantaInstant>> GovernorConfig<PeerIpKeyExtractor
             key_extractor: PeerIpKeyExtractor,
             error_handler: ErrorHandler::default(),
             middleware: PhantomData,
+            clock: DefaultClock::default(),
         }
         .finish()
         .unwrap()
@@ -322,16 +369,25 @@ impl<M: RateLimitingMiddleware<QuantaInstant>> GovernorConfig<PeerIpKeyExtractor
 /// contains everything needed to implement a middleware
 /// https://stegosaurusdormant.com/understanding-derive-clone/
 #[derive(Debug)]
-pub struct Governor<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S> {
+pub struct Governor<
+    K: KeyExtractor,
+    M: RateLimitingMiddleware<C::Instant>,
+    S,
+    C: Clock + Clone + std::fmt::Debug = DefaultClock,
+> {
     pub key_extractor: K,
-    pub limiter: SharedRateLimiter<K::Key, M>,
+    pub limiter: SharedRateLimiter<K::Key, M, C>,
     pub methods: Option<Vec<Method>>,
     pub inner: S,
     error_handler: ErrorHandler,
 }
 
-impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S: Clone> Clone
-    for Governor<K, M, S>
+impl<
+        K: KeyExtractor,
+        M: RateLimitingMiddleware<C::Instant>,
+        S: Clone,
+        C: Clock + Clone + std::fmt::Debug,
+    > Clone for Governor<K, M, S, C>
 {
     fn clone(&self) -> Self {
         Self {
@@ -344,9 +400,15 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S: Clone> Clone
     }
 }
 
-impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S> Governor<K, M, S> {
+impl<
+        K: KeyExtractor,
+        M: RateLimitingMiddleware<C::Instant>,
+        S,
+        C: Clock + Clone + std::fmt::Debug,
+    > Governor<K, M, S, C>
+{
     /// Create new governor middleware factory from configuration.
-    pub fn new(inner: S, config: &GovernorConfig<K, M>) -> Self {
+    pub fn new(inner: S, config: &GovernorConfig<K, M, C>) -> Self {
         Governor {
             key_extractor: config.key_extractor.clone(),
             limiter: config.limiter.clone(),
