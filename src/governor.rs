@@ -66,6 +66,7 @@ pub struct GovernorConfigBuilder<
 impl<C: Clock + Clone + std::fmt::Debug>
     GovernorConfigBuilder<PeerIpKeyExtractor, NoOpMiddleware<C::Instant>, C>
 {
+    /// Creates a `GovernorConfigBuilder` with default parameters and a provided `Clock``
     pub fn default_with_clock(clock: C) -> Self {
         Self {
             period: DEFAULT_PERIOD,
