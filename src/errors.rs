@@ -1,5 +1,4 @@
 use http::{HeaderMap, Response, StatusCode};
-use std::mem;
 use thiserror::Error;
 
 /// The error type returned by tower-governor.
@@ -21,14 +20,32 @@ pub enum GovernorError {
     },
 }
 
+#[cfg(feature = "axum")]
+impl From<GovernorError> for Response<axum::body::Body> {
+    fn from(error: GovernorError) -> Self {
+        error.into_response().map(From::from)
+    }
+}
+
+#[cfg(feature = "tonic")]
+impl From<GovernorError> for Response<tonic::body::Body> {
+    fn from(error: GovernorError) -> Self {
+        let (parts, message) = error.into_response().into_parts();
+        let code = match parts.status {
+            StatusCode::TOO_MANY_REQUESTS => tonic::Code::ResourceExhausted,
+            StatusCode::INTERNAL_SERVER_ERROR => tonic::Code::Internal,
+            _ => tonic::Code::Internal,
+        };
+        let mut response = tonic::Status::new(code, message).into_http();
+        response.headers_mut().extend(parts.headers);
+        response
+    }
+}
+
 impl GovernorError {
-    /// Convert self into a "default response", as if no error handler was set using
-    /// [`GovernorConfigBuilder::error_handler`].
-    pub fn as_response<ResB>(&mut self) -> Response<ResB>
-    where
-        ResB: From<String>,
-    {
-        match mem::replace(self, Self::UnableToExtractKey) {
+    /// Convert self into a "default response"
+    pub fn into_response(self) -> Response<String> {
+        match self {
             GovernorError::TooManyRequests { wait_time, headers } => {
                 let response = Response::new(format!("Too Many Requests! Wait for {}s", wait_time));
                 let (mut parts, body) = response.into_parts();
@@ -36,14 +53,14 @@ impl GovernorError {
                 if let Some(headers) = headers {
                     parts.headers = headers;
                 }
-                Response::from_parts(parts, ResB::from(body))
+                Response::from_parts(parts, body)
             }
             GovernorError::UnableToExtractKey => {
                 let response = Response::new("Unable To Extract Key!".to_string());
                 let (mut parts, body) = response.into_parts();
                 parts.status = StatusCode::INTERNAL_SERVER_ERROR;
 
-                Response::from_parts(parts, ResB::from(body))
+                Response::from_parts(parts, body)
             }
             GovernorError::Other { msg, code, headers } => {
                 let response = Response::new("Other Error!".to_string());
@@ -56,7 +73,7 @@ impl GovernorError {
                     body = msg;
                 }
 
-                Response::from_parts(parts, ResB::from(body))
+                Response::from_parts(parts, body)
             }
         }
     }

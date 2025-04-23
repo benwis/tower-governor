@@ -30,13 +30,11 @@ async fn _main() {
 /// without having to create an HTTP server.
 #[allow(dead_code)]
 fn app() -> Router {
-    let config = Arc::new(
-        GovernorConfigBuilder::default()
-            .per_millisecond(90)
-            .burst_size(2)
-            .finish()
-            .unwrap(),
-    );
+    let config = GovernorConfigBuilder::default()
+        .per_millisecond(90)
+        .burst_size(2)
+        .finish()
+        .unwrap();
 
     Router::new()
         // `GET /` goes to `root`
@@ -44,7 +42,7 @@ fn app() -> Router {
             "/",
             get(|| async { "Hello, World!" }).post(|| async { "Hello, Post World!" }),
         )
-        .layer(GovernorLayer { config })
+        .layer(GovernorLayer::new(config))
         .layer(TraceLayer::new_for_http())
 }
 
@@ -176,14 +174,12 @@ mod governor_tests {
 
         let (tx, rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
-            let config = Arc::new(
-                GovernorConfigBuilder::default()
-                    .per_millisecond(90)
-                    .burst_size(2)
-                    .methods(vec![Method::GET])
-                    .finish()
-                    .unwrap(),
-            );
+            let config = GovernorConfigBuilder::default()
+                .per_millisecond(90)
+                .burst_size(2)
+                .methods(vec![Method::GET])
+                .finish()
+                .unwrap();
 
             let app = Router::new()
                 // `GET /` goes to `root`
@@ -191,7 +187,7 @@ mod governor_tests {
                     "/",
                     get(|| async { "Hello, World!" }).post(|| async { "Hello, Post World!" }),
                 )
-                .layer(GovernorLayer { config })
+                .layer(GovernorLayer::new(config))
                 .layer(TraceLayer::new_for_http());
             tx.send(()).unwrap();
             axum::serve(
@@ -238,14 +234,12 @@ mod governor_tests {
 
         let (tx, rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
-            let config = Arc::new(
-                GovernorConfigBuilder::default()
-                    .per_millisecond(90)
-                    .burst_size(2)
-                    .use_headers()
-                    .finish()
-                    .unwrap(),
-            );
+            let config = GovernorConfigBuilder::default()
+                .per_millisecond(90)
+                .burst_size(2)
+                .use_headers()
+                .finish()
+                .unwrap();
 
             let app = Router::new()
                 // `GET /` goes to `root`
@@ -253,7 +247,7 @@ mod governor_tests {
                     "/",
                     get(|| async { "Hello, World!" }).post(|| async { "Hello, Post World!" }),
                 )
-                .layer(GovernorLayer { config })
+                .layer(GovernorLayer::new(config))
                 .layer(TraceLayer::new_for_http());
             tx.send(()).unwrap();
             axum::serve(
@@ -413,15 +407,13 @@ mod governor_tests {
 
         let (tx, rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
-            let config = Arc::new(
-                GovernorConfigBuilder::default()
-                    .per_millisecond(90)
-                    .burst_size(2)
-                    .methods(vec![Method::GET])
-                    .use_headers()
-                    .finish()
-                    .unwrap(),
-            );
+            let config = GovernorConfigBuilder::default()
+                .per_millisecond(90)
+                .burst_size(2)
+                .methods(vec![Method::GET])
+                .use_headers()
+                .finish()
+                .unwrap();
 
             let app = Router::new()
                 // `GET /` goes to `root`
@@ -429,7 +421,7 @@ mod governor_tests {
                     "/",
                     get(|| async { "Hello, World!" }).post(|| async { "Hello, Post World!" }),
                 )
-                .layer(GovernorLayer { config })
+                .layer(GovernorLayer::new(config))
                 .layer(TraceLayer::new_for_http());
             tx.send(()).unwrap();
             axum::serve(
@@ -552,19 +544,18 @@ mod governor_tests {
             crate::governor::GovernorConfigBuilder::default()
                 .per_second(10)
                 .burst_size(1)
-                .error_handler(|_| {
-                    http::Response::builder()
-                        .status(http::StatusCode::IM_A_TEAPOT)
-                        .body(axum::body::Body::from("a custom error string"))
-                        .unwrap()
-                })
                 .finish()
                 .unwrap(),
         );
 
         let app = Router::new()
             .route("/", get(|| async { "Hello, World!" }))
-            .layer(GovernorLayer { config })
+            .layer(GovernorLayer::new(config).error_handler(|_| {
+                http::Response::builder()
+                    .status(http::StatusCode::IM_A_TEAPOT)
+                    .body(body::Body::from("a custom error string"))
+                    .unwrap()
+            }))
             .layer(TraceLayer::new_for_http());
 
         let req = || http::Request::new(body::Body::empty());

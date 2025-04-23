@@ -2,7 +2,6 @@ use axum::{routing::get, Router};
 use http::{request::Request, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_governor::{
     errors::GovernorError, governor::GovernorConfigBuilder, key_extractor::KeyExtractor,
@@ -20,7 +19,7 @@ impl KeyExtractor for UserToken {
             .get("Authorization")
             .and_then(|token| token.to_str().ok())
             .and_then(|token| token.strip_prefix("Bearer "))
-            .and_then(|token| Some(token.trim().to_owned()))
+            .map(|token| token.trim().to_owned())
             .ok_or(GovernorError::Other {
                 code: StatusCode::UNAUTHORIZED,
                 msg: Some("You don't have permission to access".to_string()),
@@ -28,7 +27,7 @@ impl KeyExtractor for UserToken {
             })
     }
     fn key_name(&self, key: &Self::Key) -> Option<String> {
-        Some(format!("{}", key))
+        Some(key.clone())
     }
     fn name(&self) -> &'static str {
         "UserToken"
@@ -49,23 +48,19 @@ async fn main() {
 
     // Allow bursts with up to five requests per IP address
     // and replenishes one element every twenty seconds
-    let governor_conf = Arc::new(
-        GovernorConfigBuilder::default()
-            .per_second(20)
-            .burst_size(5)
-            .key_extractor(UserToken)
-            .use_headers()
-            .finish()
-            .unwrap(),
-    );
+    let governor_conf = GovernorConfigBuilder::default()
+        .per_second(20)
+        .burst_size(5)
+        .key_extractor(UserToken)
+        .use_headers()
+        .finish()
+        .unwrap();
 
     // build our application with a route
     let app = Router::new()
         // `GET /` goes to `root`
         .route("/", get(hello))
-        .layer(GovernorLayer {
-            config: governor_conf,
-        });
+        .layer(GovernorLayer::new(governor_conf));
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`

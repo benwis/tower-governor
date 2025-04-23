@@ -9,8 +9,8 @@ pub mod key_extractor;
 use crate::governor::{Governor, GovernorConfig};
 use ::governor::clock::{Clock, DefaultClock, QuantaInstant};
 use ::governor::middleware::{NoOpMiddleware, RateLimitingMiddleware, StateInformationMiddleware};
-use axum::body::Body;
 pub use errors::GovernorError;
+use governor::ErrorHandler;
 use http::response::Response;
 
 use http::header::{HeaderName, HeaderValue};
@@ -24,43 +24,77 @@ use std::{future::Future, pin::Pin, task::ready};
 use tower::{Layer, Service};
 
 /// The Layer type that implements tower::Layer and is passed into `.layer()`
-pub struct GovernorLayer<K, M>
+pub struct GovernorLayer<K, M, RespBody>
 where
     K: KeyExtractor,
     M: RateLimitingMiddleware<QuantaInstant>,
 {
-    pub config: Arc<GovernorConfig<K, M>>,
+    config: Arc<GovernorConfig<K, M>>,
+    error_handler: Option<ErrorHandler<RespBody>>,
 }
 
-impl<K, M, S> Layer<S> for GovernorLayer<K, M>
+impl<K, M, RespBody> GovernorLayer<K, M, RespBody>
 where
     K: KeyExtractor,
     M: RateLimitingMiddleware<QuantaInstant>,
 {
-    type Service = Governor<K, M, S>;
+    /// Create a new layer from config
+    pub fn new(config: impl Into<Arc<GovernorConfig<K, M>>>) -> Self {
+        Self {
+            config: config.into(),
+            error_handler: None,
+        }
+    }
+
+    /// Set custom error handler for governor errors [`GovernorError`]
+    ///
+    /// If the handler is not set, the response will be created via the conversion `RespBody:
+    /// From<GovernorError>`.
+    pub fn error_handler(
+        mut self,
+        handler: impl Fn(GovernorError) -> Response<RespBody> + Send + Sync + 'static,
+    ) -> Self {
+        self.error_handler = Some(ErrorHandler::new(handler));
+        self
+    }
+}
+
+impl<K, M, S, RespBody> Layer<S> for GovernorLayer<K, M, RespBody>
+where
+    K: KeyExtractor,
+    M: RateLimitingMiddleware<QuantaInstant>,
+{
+    type Service = Governor<K, M, S, RespBody>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        Governor::new(inner, &self.config)
+        let mut service = Governor::new(inner, &self.config);
+        service.set_error_handler(self.error_handler.clone());
+        service
     }
 }
 
 /// https://stegosaurusdormant.com/understanding-derive-clone/
-impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> Clone for GovernorLayer<K, M> {
+impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, RespBody> Clone
+    for GovernorLayer<K, M, RespBody>
+{
     fn clone(&self) -> Self {
         Self {
             config: self.config.clone(),
+            error_handler: self.error_handler.clone(),
         }
     }
 }
+
 // Implement tower::Service for Governor
-impl<K, S, ReqBody> Service<Request<ReqBody>> for Governor<K, NoOpMiddleware, S>
+impl<K, S, ReqBody, RespBody> Service<Request<ReqBody>> for Governor<K, NoOpMiddleware, S, RespBody>
 where
     K: KeyExtractor,
-    S: Service<Request<ReqBody>, Response = Response<Body>>,
+    S: Service<Request<ReqBody>, Response = Response<RespBody>>,
+    S::Response: From<GovernorError>,
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = ResponseFuture<S::Future>;
+    type Future = ResponseFuture<S::Future, RespBody>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
@@ -109,7 +143,7 @@ where
                     headers.insert("x-ratelimit-after", wait_time.into());
                     headers.insert("retry-after", wait_time.into());
 
-                    let error_response = self.error_handler()(GovernorError::TooManyRequests {
+                    let error_response = self.handle_error(GovernorError::TooManyRequests {
                         wait_time,
                         headers: Some(headers),
                     });
@@ -122,14 +156,11 @@ where
                 }
             },
 
-            Err(e) => {
-                let error_response = self.error_handler()(e);
-                ResponseFuture {
-                    inner: Kind::Error {
-                        error_response: Some(error_response),
-                    },
-                }
-            }
+            Err(e) => ResponseFuture {
+                inner: Kind::Error {
+                    error_response: Some(self.handle_error(e)),
+                },
+            },
         }
     }
 }
@@ -137,14 +168,14 @@ where
 #[derive(Debug)]
 #[pin_project]
 /// Response future for [`Governor`].
-pub struct ResponseFuture<F> {
+pub struct ResponseFuture<F, RespBody> {
     #[pin]
-    inner: Kind<F>,
+    inner: Kind<F, RespBody>,
 }
 
 #[derive(Debug)]
 #[pin_project(project = KindProj)]
-enum Kind<F> {
+enum Kind<F, RespBody> {
     Passthrough {
         #[pin]
         future: F,
@@ -162,15 +193,15 @@ enum Kind<F> {
         future: F,
     },
     Error {
-        error_response: Option<Response<Body>>,
+        error_response: Option<Response<RespBody>>,
     },
 }
 
-impl<F, E> Future for ResponseFuture<F>
+impl<F, E, RespBody> Future for ResponseFuture<F, RespBody>
 where
-    F: Future<Output = Result<Response<Body>, E>>,
+    F: Future<Output = Result<Response<RespBody>, E>>,
 {
-    type Output = Result<Response<Body>, E>;
+    type Output = Result<Response<RespBody>, E>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project().inner.project() {
@@ -214,16 +245,18 @@ where
 }
 
 // Implementation of Service for Governor using the StateInformationMiddleware.
-impl<K, S, ReqBody> Service<Request<ReqBody>> for Governor<K, StateInformationMiddleware, S>
+impl<K, S, ReqBody, RespBody> Service<Request<ReqBody>>
+    for Governor<K, StateInformationMiddleware, S, RespBody>
 where
     K: KeyExtractor,
-    S: Service<Request<ReqBody>, Response = Response<Body>>,
+    S: Service<Request<ReqBody>, Response = Response<RespBody>>,
+    S::Response: From<GovernorError>,
     // Body type of response must impl From<String> trait to convert potential error
     // produced by governor to re
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = ResponseFuture<S::Future>;
+    type Future = ResponseFuture<S::Future, RespBody>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         // Our middleware doesn't care about backpressure so its ready as long
@@ -284,7 +317,7 @@ where
                     );
                     headers.insert("x-ratelimit-remaining", 0.into());
 
-                    let error_response = self.error_handler()(GovernorError::TooManyRequests {
+                    let error_response = self.handle_error(GovernorError::TooManyRequests {
                         wait_time,
                         headers: Some(headers),
                     });
@@ -298,14 +331,11 @@ where
             },
 
             // Extraction failed, stop right now.
-            Err(e) => {
-                let error_response = self.error_handler()(e);
-                ResponseFuture {
-                    inner: Kind::Error {
-                        error_response: Some(error_response),
-                    },
-                }
-            }
+            Err(e) => ResponseFuture {
+                inner: Kind::Error {
+                    error_response: Some(self.handle_error(e)),
+                },
+            },
         }
     }
 }

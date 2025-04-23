@@ -42,9 +42,7 @@ async fn main() {
     let app = Router::new()
         // `GET /` goes to `root`
         .route("/", get(hello))
-        .layer(GovernorLayer {
-            config: governor_conf,
-        });
+        .layer(GovernorLayer::new(governor_conf));
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`

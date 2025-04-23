@@ -55,15 +55,11 @@ async fn main() {
 
     // Allow bursts with up to five requests per IP address
     // and replenishes one element every two seconds
-    // We Box it because Axum 0.6 requires all Layers to be Clone
-    // and thus we need a static reference to it
-    let governor_conf = Arc::new(
-        GovernorConfigBuilder::default()
-            .per_second(2)
-            .burst_size(5)
-            .finish()
-            .unwrap(),
-    );
+    let governor_conf = GovernorConfigBuilder::default()
+        .per_second(2)
+        .burst_size(5)
+        .finish()
+        .unwrap();
 
     let governor_limiter = governor_conf.limiter().clone();
     let interval = Duration::from_secs(60);
@@ -80,9 +76,7 @@ async fn main() {
     let app = Router::new()
         // `GET /` goes to `root`
         .route("/", get(hello))
-        .layer(GovernorLayer {
-            config: governor_conf,
-        });
+        .layer(GovernorLayer::new(governor_conf));
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
@@ -132,14 +126,14 @@ async fn main() {
  Check out the [custom_key_bearer](https://github.com/benwis/tower-governor/blob/main/examples/src/custom_key_bearer.rs) example for more information.
 
  # Crate feature flags
- 
+
  tower-governor uses [feature flags](https://doc.rust-lang.org/cargo/reference/manifest.html#the-features-section) to reduce the amount of compiled code and it is possible to enable certain features over others. Below is a list of the available feature flags:
  - `axum`: Enables support for axum web framework
  - `tracing`: Enables tracing output for this middleware
 
  ### Example for no-default-features
 
- - Disabling [`default` feature](https://doc.rust-lang.org/cargo/reference/features.html#the-default-feature) will change behavior of [PeerIpKeyExtractor] and [SmartIpKeyExtractor]: These two key extractors will expect [SocketAddr] type from [Request]'s [Extensions]. 
+ - Disabling [`default` feature](https://doc.rust-lang.org/cargo/reference/features.html#the-default-feature) will change behavior of [PeerIpKeyExtractor] and [SmartIpKeyExtractor]: These two key extractors will expect [SocketAddr] type from [Request]'s [Extensions].
  - Fail to provide valid `SocketAddr` could result in [GovernorError::UnableToExtractKey].
 
  Cargo.toml
@@ -158,11 +152,11 @@ async fn main() {
  # async fn service() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
  // service function expecting rate limiting by governor.
- let service = service_fn(|_: Request<()>| async { 
-    Ok::<_, Infallible>(Response::new(axum::body::Body::from("mock response"))) 
+ let service = service_fn(|_: Request<()>| async {
+    Ok::<_, Infallible>(Response::new(axum::body::Body::from("mock response")))
  });
- 
- let config = Arc::new(GovernorConfigBuilder::default().finish().unwrap());
+
+ let config = GovernorConfigBuilder::default().finish().unwrap();
 
  // build service with governor layer
  let service = ServiceBuilder::new()
@@ -172,9 +166,9 @@ async fn main() {
         req.extensions_mut().insert(addr);
         req
     })
-    .layer(GovernorLayer { config })
+    .layer(GovernorLayer::new(config))
     .service(service);
- 
+
  // mock client socket addr and http request.
  let addr = "127.0.0.1:12345".parse().unwrap();
  let req = Request::default();
@@ -197,9 +191,8 @@ async fn main() {
 
  # Error Handling
 
- This crate surfaces a GovernorError with suggested headers, and includes [`GovernorConfigBuilder::error_handler`] method that will turn those errors into a Response. Feel free to provide your own error handler that takes in [`GovernorError`] and returns a [`Response`](https://docs.rs/http/latest/http/response/struct.Response.html). 
+ This crate surfaces a [`GovernorError`] with suggested headers. When feature `axum` or `tonic` is enabled, this error is converted into a Response with the corresponding body type via the `From` trait implementation. To specify a custom error handler use [`GovernorLayer::error_handler`] or [`governor::Governor::error_handler`] method that will turn those errors into a [`Response`](https://docs.rs/http/latest/http/response/struct.Response.html).
 
-[`GovernorConfigBuilder::error_handler`]: crate::governor::GovernorConfigBuilder::error_handler
 
  # Common pitfalls
 
@@ -207,3 +200,5 @@ async fn main() {
  This will create an independent rate limiter for each configuration! Instead pass the same configuration reference into [`Governor::new()`](https://docs.rs/tower_governor/latest/tower_governor/governor/struct.Governor.html#method.new), like it is described in the example.
 
  2. Be careful to create your server with [`.into_make_service_with_connect_info::<SocketAddr>`](https://docs.rs/axum/latest/axum/struct.Router.html#method.into_make_service_with_connect_info) instead of `.into_make_service()` if you are using the default PeerIpKeyExtractor. Otherwise there will be no peer ip address for Tower to find!
+
+ 3. When using the Governor layer with [`tonic`], you have to extract the IP in an interceptor. See `examples/src/tonic.rs`.
