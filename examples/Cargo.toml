@@ -30,4 +30,4 @@ tower = "0.5.1"
 serde = { version = "1.0.149", features = ["derive"] }
 http = "1.0.0"
 governor = "0.10.0"
-tonic = "0.13.0"
+tonic = "0.14.1"
