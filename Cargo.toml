@@ -10,11 +10,12 @@ edition = "2021"
 keywords = ["axum", "tower", "tonic", "rate-limit", "governor"]
 categories = ["web-programming::http-server"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace]
+members = ["examples"]
 
 [dependencies]
 forwarded-header-value = "0.1.1"
-governor = "0.8.0"
+governor = "0.10.0"
 http = "1.0.0"
 pin-project = "1.0.12"
 thiserror = "2.0.0"
@@ -22,6 +23,7 @@ tower = "0.5.1"
 tracing = { version = "0.1.37", features = ["attributes"] }
 
 axum = { version = "0.8", optional = true }
+tonic = { version = "0.14.1", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
@@ -33,8 +35,10 @@ tower-http = { version = "0.6", features = ["trace"] }
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 
 [features]
-default = ["axum"]
+default = ["axum", "tonic"]
 # Enables support for axum web framework
 axum = ["dep:axum"]
+# Enables support for tonic web framework
+tonic = ["dep:tonic"]
 # Enables tracing output for this middleware
 tracing = []

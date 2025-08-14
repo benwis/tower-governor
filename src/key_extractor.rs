@@ -109,6 +109,7 @@ impl KeyExtractor for SmartIpKeyExtractor {
             .or_else(|| maybe_x_real_ip(headers))
             .or_else(|| maybe_forwarded(headers))
             .or_else(|| maybe_connect_info(req))
+            .or_else(|| maybe_socket_addr(req))
             .ok_or(GovernorError::UnableToExtractKey)
     }
 
@@ -159,16 +160,19 @@ fn maybe_forwarded(headers: &HeaderMap) -> Option<IpAddr> {
     })
 }
 
-#[cfg(feature = "axum")]
-/// Looks in `ConnectInfo` extension
+/// Looks in `ConnectInfo` extension (if `axum` feature is enabled)
 fn maybe_connect_info<T>(req: &Request<T>) -> Option<IpAddr> {
-    req.extensions()
-        .get::<axum::extract::ConnectInfo<SocketAddr>>()
-        .map(|addr| addr.ip())
+    #[cfg(feature = "axum")]
+    {
+        req.extensions()
+            .get::<axum::extract::ConnectInfo<SocketAddr>>()
+            .map(|addr| addr.ip())
+    }
+    #[cfg(not(feature = "axum"))]
+    None
 }
 
-#[cfg(not(feature = "axum"))]
-/// Looks in `ConnectInfo` extension
-fn maybe_connect_info<T>(req: &Request<T>) -> Option<IpAddr> {
+/// Looks in [`SocketAddr`] extension
+fn maybe_socket_addr<T>(req: &Request<T>) -> Option<IpAddr> {
     req.extensions().get::<SocketAddr>().map(|addr| addr.ip())
 }

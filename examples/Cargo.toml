@@ -14,15 +14,20 @@ path = "src/basic.rs"
 name = "custom_key_bearer"
 path = "src/custom_key_bearer.rs"
 
+[[bin]]
+name = "tonic"
+path = "src/tonic.rs"
 
 
 [dependencies]
-axum = "0.7"
-tower_governor={path="../", features=["tracing"]}
+tower_governor = { path = "../", features = ["tracing"] }
+
+axum = "0.8"
 tokio = { version = "1.23.0", features = ["full"] }
-tracing = {version="0.1.37", features=["attributes"]}
+tracing = { version = "0.1.37", features = ["attributes"] }
 tracing-subscriber = "0.3"
 tower = "0.5.1"
 serde = { version = "1.0.149", features = ["derive"] }
 http = "1.0.0"
-governor = "0.7.0"
+governor = "0.10.0"
+tonic = "0.14.1"

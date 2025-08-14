@@ -2,7 +2,6 @@ use crate::{
     key_extractor::{KeyExtractor, PeerIpKeyExtractor},
     GovernorError,
 };
-use axum::body::Body;
 use governor::{
     clock::{DefaultClock, QuantaInstant},
     middleware::{NoOpMiddleware, RateLimitingMiddleware, StateInformationMiddleware},
@@ -55,34 +54,37 @@ pub struct GovernorConfigBuilder<K: KeyExtractor, M: RateLimitingMiddleware<Quan
     burst_size: u32,
     methods: Option<Vec<Method>>,
     key_extractor: K,
-    error_handler: ErrorHandler,
     middleware: PhantomData<M>,
 }
 
 // function for handling GovernorError and produce valid http Response type.
-#[derive(Clone)]
-struct ErrorHandler(Arc<dyn Fn(GovernorError) -> Response<Body> + Send + Sync>);
+pub(crate) struct ErrorHandler<RespBody>(
+    Arc<dyn Fn(GovernorError) -> Response<RespBody> + Send + Sync>,
+);
 
-impl Default for ErrorHandler {
-    fn default() -> Self {
-        Self(Arc::new(|mut e| e.as_response()))
+impl<RespBody> ErrorHandler<RespBody> {
+    pub(crate) fn new(
+        f: impl Fn(GovernorError) -> Response<RespBody> + Send + Sync + 'static,
+    ) -> Self {
+        Self(Arc::new(f))
+    }
+
+    pub(crate) fn handle_error(&self, error: GovernorError) -> Response<RespBody> {
+        (self.0)(error)
     }
 }
 
-impl fmt::Debug for ErrorHandler {
+impl<RespBody> Clone for ErrorHandler<RespBody> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<RespBody> fmt::Debug for ErrorHandler<RespBody> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ErrorHandler").finish()
     }
 }
-
-impl PartialEq for ErrorHandler {
-    fn eq(&self, _: &Self) -> bool {
-        // there is no easy way to tell two object equals.
-        true
-    }
-}
-
-impl Eq for ErrorHandler {}
 
 impl Default for GovernorConfigBuilder<PeerIpKeyExtractor, NoOpMiddleware> {
     /// The default configuration which is suitable for most services.
@@ -90,29 +92,6 @@ impl Default for GovernorConfigBuilder<PeerIpKeyExtractor, NoOpMiddleware> {
     /// The values can be modified by calling other methods on this struct.
     fn default() -> Self {
         Self::const_default()
-    }
-}
-
-impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBuilder<K, M> {
-    /// Set handler function for handling [GovernorError]
-    /// # Example
-    /// ```rust
-    /// # use http::Response;
-    /// # use tower_governor::governor::GovernorConfigBuilder;
-    /// GovernorConfigBuilder::default()
-    ///     .error_handler(|mut error| {
-    ///         // match against GovernorError and produce customized Response type.
-    ///         match error {
-    ///             _ => Response::new("some error".into())
-    ///         }
-    ///     });
-    /// ```
-    pub fn error_handler<F>(&mut self, func: F) -> &mut Self
-    where
-        F: Fn(GovernorError) -> Response<Body> + Send + Sync + 'static,
-    {
-        self.error_handler = ErrorHandler(Arc::new(func));
-        self
     }
 }
 
@@ -125,7 +104,6 @@ impl<M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBuilder<PeerIpKeyEx
             burst_size: DEFAULT_BURST_SIZE,
             methods: None,
             key_extractor: PeerIpKeyExtractor,
-            error_handler: ErrorHandler::default(),
             middleware: PhantomData,
         }
     }
@@ -226,7 +204,6 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBu
             burst_size: self.burst_size,
             methods: self.methods.to_owned(),
             key_extractor,
-            error_handler: self.error_handler.clone(),
             middleware: PhantomData,
         }
     }
@@ -247,7 +224,6 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBu
             burst_size: self.burst_size,
             methods: self.methods.to_owned(),
             key_extractor: self.key_extractor.clone(),
-            error_handler: self.error_handler.clone(),
             middleware: PhantomData,
         }
     }
@@ -267,7 +243,6 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBu
                     .with_middleware::<M>(),
                 ),
                 methods: self.methods.clone(),
-                error_handler: self.error_handler.clone(),
             })
         } else {
             None
@@ -281,7 +256,6 @@ pub struct GovernorConfig<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInsta
     key_extractor: K,
     limiter: SharedRateLimiter<K::Key, M>,
     methods: Option<Vec<Method>>,
-    error_handler: ErrorHandler,
 }
 
 impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfig<K, M> {
@@ -310,7 +284,6 @@ impl<M: RateLimitingMiddleware<QuantaInstant>> GovernorConfig<PeerIpKeyExtractor
             burst_size: 2,
             methods: None,
             key_extractor: PeerIpKeyExtractor,
-            error_handler: ErrorHandler::default(),
             middleware: PhantomData,
         }
         .finish()
@@ -322,16 +295,16 @@ impl<M: RateLimitingMiddleware<QuantaInstant>> GovernorConfig<PeerIpKeyExtractor
 /// contains everything needed to implement a middleware
 /// https://stegosaurusdormant.com/understanding-derive-clone/
 #[derive(Debug)]
-pub struct Governor<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S> {
+pub struct Governor<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S, RespBody> {
     pub key_extractor: K,
     pub limiter: SharedRateLimiter<K::Key, M>,
     pub methods: Option<Vec<Method>>,
     pub inner: S,
-    error_handler: ErrorHandler,
+    error_handler: Option<ErrorHandler<RespBody>>,
 }
 
-impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S: Clone> Clone
-    for Governor<K, M, S>
+impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S: Clone, RespBody> Clone
+    for Governor<K, M, S, RespBody>
 {
     fn clone(&self) -> Self {
         Self {
@@ -344,7 +317,9 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S: Clone> Clone
     }
 }
 
-impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S> Governor<K, M, S> {
+impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S, RespBody>
+    Governor<K, M, S, RespBody>
+{
     /// Create new governor middleware factory from configuration.
     pub fn new(inner: S, config: &GovernorConfig<K, M>) -> Self {
         Governor {
@@ -352,11 +327,34 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S> Governor<K, M
             limiter: config.limiter.clone(),
             methods: config.methods.clone(),
             inner,
-            error_handler: config.error_handler.clone(),
+            error_handler: None,
         }
     }
 
-    pub(crate) fn error_handler(&self) -> &(dyn Fn(GovernorError) -> Response<Body> + Send + Sync) {
-        &*self.error_handler.0
+    /// Set custom error handler for governor errors [`GovernorError`]
+    ///
+    /// If the handler is not set, the response will be created via the conversion `RespBody:
+    /// From<GovernorError>`.
+    pub fn error_handler(
+        mut self,
+        handler: impl Fn(GovernorError) -> Response<RespBody> + Send + Sync + 'static,
+    ) -> Self {
+        self.error_handler = Some(ErrorHandler::new(handler));
+        self
+    }
+
+    pub(crate) fn set_error_handler(&mut self, handler: Option<ErrorHandler<RespBody>>) {
+        self.error_handler = handler;
+    }
+
+    pub(crate) fn handle_error(&self, error: GovernorError) -> Response<RespBody>
+    where
+        Response<RespBody>: From<GovernorError>,
+    {
+        if let Some(handler) = self.error_handler.as_ref() {
+            handler.handle_error(error)
+        } else {
+            error.into()
+        }
     }
 }
