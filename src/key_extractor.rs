@@ -131,7 +131,14 @@ fn maybe_x_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
     headers
         .get(X_FORWARDED_FOR)
         .and_then(|hv| hv.to_str().ok())
-        .and_then(|s| s.split(',').find_map(|s| s.trim().parse::<IpAddr>().ok()))
+        .and_then(|s| {
+            s.split(',').find_map(|s| {
+                s.trim()
+                    .parse::<IpAddr>()
+                    .or(s.parse::<SocketAddr>().map(|addr| addr.ip()))
+                    .ok()
+            })
+        })
 }
 
 /// Tries to parse the `x-real-ip` header
