@@ -18,6 +18,7 @@ use http::request::Request;
 use http::HeaderMap;
 use key_extractor::KeyExtractor;
 use pin_project::pin_project;
+use std::ops::Add;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::{future::Future, pin::Pin, task::ready};
@@ -124,7 +125,8 @@ where
                 Err(negative) => {
                     let wait_time = negative
                         .wait_time_from(DefaultClock::default().now())
-                        .as_secs();
+                        .as_secs()
+                        .add(1);
 
                     #[cfg(feature = "tracing")]
                     {
