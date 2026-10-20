@@ -5,7 +5,7 @@ use crate::{
 use governor::{
     clock::{DefaultClock, QuantaInstant},
     middleware::{NoOpMiddleware, RateLimitingMiddleware, StateInformationMiddleware},
-    state::keyed::DefaultKeyedStateStore,
+    state::{keyed::DefaultKeyedStateStore, StateStore},
     Quota, RateLimiter,
 };
 use http::{Method, Response};
@@ -16,8 +16,8 @@ pub const DEFAULT_BURST_SIZE: u32 = 8;
 
 // Required by Governor's RateLimiter to share it across threads
 // See Governor User Guide: https://docs.rs/governor/0.6.0/governor/_guide/index.html
-pub type SharedRateLimiter<Key, M> =
-    Arc<RateLimiter<Key, DefaultKeyedStateStore<Key>, DefaultClock, M>>;
+pub type SharedRateLimiter<Key, M, S = DefaultKeyedStateStore<Key>> =
+    Arc<RateLimiter<Key, S, DefaultClock, M>>;
 
 /// Helper struct for building a configuration for the governor middleware.
 ///
@@ -231,17 +231,59 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBu
     /// Finish building the configuration and return the configuration for the middleware.
     /// Returns `None` if either burst size or period interval are zero.
     pub fn finish(&mut self) -> Option<GovernorConfig<K, M>> {
+        self.finish_with(DefaultKeyedStateStore::<K::Key>::default())
+    }
+
+    /// Like [`finish()`](Self::finish), but lets you supply the state store that
+    /// keeps the per-key rate limiting state.
+    ///
+    /// The default store is an in-memory map that never expires entries, so a
+    /// long-running process that sees many distinct keys keeps them forever. A
+    /// custom store can bound that: expire idle entries, spill to disk, add
+    /// metrics, or share state with something else.
+    ///
+    /// The store's key type must match the configured [`KeyExtractor`]'s
+    /// [`Key`](KeyExtractor::Key).
+    ///
+    /// Returns `None` if either burst size or period interval are zero, same as
+    /// [`finish()`](Self::finish).
+    ///
+    /// # Eviction and correctness
+    ///
+    /// Dropping a key's state is equivalent to resetting that key's quota: a key
+    /// that had already spent its allowance would get a fresh bucket. A custom
+    /// store may therefore only evict entries whose state is indistinguishable
+    /// from a fresh one — for the GCRA limiter that means the bucket has fully
+    /// replenished, i.e. the key has been idle for at least
+    /// `burst_size * period`. Stores that evict by capacity alone can hand out
+    /// extra quota under load; see
+    /// [`governor::state::keyed::ShrinkableKeyedStateStore`] for the housekeeping
+    /// hooks the built-in stores expose.
+    ///
+    /// ```
+    /// use governor::state::keyed::DefaultKeyedStateStore;
+    /// use tower_governor::governor::GovernorConfigBuilder;
+    ///
+    /// let config = GovernorConfigBuilder::default()
+    ///     .per_second(60)
+    ///     .burst_size(10)
+    ///     .finish_with(DefaultKeyedStateStore::<std::net::IpAddr>::default())
+    ///     .unwrap();
+    /// ```
+    pub fn finish_with<S>(&mut self, state_store: S) -> Option<GovernorConfig<K, M, S>>
+    where
+        S: StateStore<Key = K::Key>,
+    {
         if self.burst_size != 0 && self.period.as_nanos() != 0 {
+            let quota = Quota::with_period(self.period)
+                .unwrap()
+                .allow_burst(NonZeroU32::new(self.burst_size).unwrap());
+            let limiter: RateLimiter<K::Key, S, DefaultClock, NoOpMiddleware> =
+                RateLimiter::new(quota, state_store, DefaultClock::default());
+
             Some(GovernorConfig {
                 key_extractor: self.key_extractor.clone(),
-                limiter: Arc::new(
-                    RateLimiter::keyed(
-                        Quota::with_period(self.period)
-                            .unwrap()
-                            .allow_burst(NonZeroU32::new(self.burst_size).unwrap()),
-                    )
-                    .with_middleware::<M>(),
-                ),
+                limiter: Arc::new(limiter.with_middleware::<M>()),
                 methods: self.methods.clone(),
             })
         } else {
@@ -252,14 +294,23 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfigBu
 
 #[derive(Debug, Clone)]
 /// Configuration for the Governor middleware.
-pub struct GovernorConfig<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> {
+pub struct GovernorConfig<
+    K: KeyExtractor,
+    M: RateLimitingMiddleware<QuantaInstant>,
+    S = DefaultKeyedStateStore<<K as KeyExtractor>::Key>,
+> where
+    S: StateStore<Key = K::Key>,
+{
     key_extractor: K,
-    limiter: SharedRateLimiter<K::Key, M>,
+    limiter: SharedRateLimiter<K::Key, M, S>,
     methods: Option<Vec<Method>>,
 }
 
-impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>> GovernorConfig<K, M> {
-    pub fn limiter(&self) -> &SharedRateLimiter<K::Key, M> {
+impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S> GovernorConfig<K, M, S>
+where
+    S: StateStore<Key = K::Key>,
+{
+    pub fn limiter(&self) -> &SharedRateLimiter<K::Key, M, S> {
         &self.limiter
     }
 }
@@ -295,16 +346,26 @@ impl<M: RateLimitingMiddleware<QuantaInstant>> GovernorConfig<PeerIpKeyExtractor
 /// contains everything needed to implement a middleware
 /// https://stegosaurusdormant.com/understanding-derive-clone/
 #[derive(Debug)]
-pub struct Governor<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S, RespBody> {
+pub struct Governor<
+    K: KeyExtractor,
+    M: RateLimitingMiddleware<QuantaInstant>,
+    S,
+    RespBody,
+    Store = DefaultKeyedStateStore<<K as KeyExtractor>::Key>,
+> where
+    Store: StateStore<Key = K::Key>,
+{
     pub key_extractor: K,
-    pub limiter: SharedRateLimiter<K::Key, M>,
+    pub limiter: SharedRateLimiter<K::Key, M, Store>,
     pub methods: Option<Vec<Method>>,
     pub inner: S,
     error_handler: Option<ErrorHandler<RespBody>>,
 }
 
-impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S: Clone, RespBody> Clone
-    for Governor<K, M, S, RespBody>
+impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S: Clone, RespBody, Store> Clone
+    for Governor<K, M, S, RespBody, Store>
+where
+    Store: StateStore<Key = K::Key>,
 {
     fn clone(&self) -> Self {
         Self {
@@ -317,11 +378,13 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S: Clone, RespBo
     }
 }
 
-impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S, RespBody>
-    Governor<K, M, S, RespBody>
+impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, S, RespBody, Store>
+    Governor<K, M, S, RespBody, Store>
+where
+    Store: StateStore<Key = K::Key>,
 {
     /// Create new governor middleware factory from configuration.
-    pub fn new(inner: S, config: &GovernorConfig<K, M>) -> Self {
+    pub fn new(inner: S, config: &GovernorConfig<K, M, Store>) -> Self {
         Governor {
             key_extractor: config.key_extractor.clone(),
             limiter: config.limiter.clone(),

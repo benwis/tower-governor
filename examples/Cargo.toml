@@ -18,6 +18,10 @@ path = "src/custom_key_bearer.rs"
 name = "tonic"
 path = "src/tonic.rs"
 
+[[bin]]
+name = "custom_state_store"
+path = "src/custom_state_store.rs"
+
 
 [dependencies]
 tower_governor = { path = "../", features = ["tracing"] }

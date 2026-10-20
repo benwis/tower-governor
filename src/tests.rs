@@ -573,3 +573,85 @@ mod governor_tests {
         assert_eq!(body.as_ref(), b"a custom error string");
     }
 }
+
+#[cfg(test)]
+mod custom_state_store_tests {
+    use std::net::{IpAddr, SocketAddr};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    use axum::{routing::get, Router};
+    use governor::nanos::Nanos;
+    use governor::state::keyed::DefaultKeyedStateStore;
+    use governor::state::StateStore;
+    use reqwest::StatusCode;
+
+    use crate::governor::GovernorConfigBuilder;
+    use crate::GovernorLayer;
+
+    /// Wraps the default store and counts how often the limiter consults it.
+    struct CountingStore<S> {
+        inner: S,
+        calls: Arc<AtomicUsize>,
+    }
+
+    impl<S: StateStore> StateStore for CountingStore<S> {
+        type Key = S::Key;
+
+        fn measure_and_replace<T, F, E>(&self, key: &Self::Key, f: F) -> Result<T, E>
+        where
+            F: Fn(Option<Nanos>) -> Result<(T, Nanos), E>,
+        {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            self.inner.measure_and_replace(key, f)
+        }
+    }
+
+    /// The injected store is actually used, and the limiter still enforces the quota.
+    #[tokio::test]
+    async fn custom_state_store_is_used_and_still_limits() {
+        let calls = Arc::new(AtomicUsize::new(0));
+
+        let config = GovernorConfigBuilder::default()
+            .per_second(60)
+            .burst_size(2)
+            .finish_with(CountingStore {
+                inner: DefaultKeyedStateStore::<IpAddr>::default(),
+                calls: calls.clone(),
+            })
+            .unwrap();
+
+        let app = Router::new()
+            .route("/", get(|| async { "ok" }))
+            .layer(GovernorLayer::new(config));
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .unwrap();
+        });
+
+        let client = reqwest::Client::new();
+        let url = format!("http://{}", addr);
+
+        assert_eq!(
+            client.get(&url).send().await.unwrap().status(),
+            StatusCode::OK
+        );
+        assert_eq!(
+            client.get(&url).send().await.unwrap().status(),
+            StatusCode::OK
+        );
+        assert_eq!(
+            client.get(&url).send().await.unwrap().status(),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+
+        assert_eq!(calls.load(Ordering::Relaxed), 3);
+    }
+}

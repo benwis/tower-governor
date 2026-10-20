@@ -9,6 +9,8 @@ pub mod key_extractor;
 use crate::governor::{Governor, GovernorConfig};
 use ::governor::clock::{Clock, DefaultClock, QuantaInstant};
 use ::governor::middleware::{NoOpMiddleware, RateLimitingMiddleware, StateInformationMiddleware};
+use ::governor::state::keyed::DefaultKeyedStateStore;
+use ::governor::state::StateStore;
 pub use errors::GovernorError;
 use governor::ErrorHandler;
 use http::response::Response;
@@ -24,22 +26,26 @@ use std::{future::Future, pin::Pin, task::ready};
 use tower::{Layer, Service};
 
 /// The Layer type that implements tower::Layer and is passed into `.layer()`
-pub struct GovernorLayer<K, M, RespBody>
-where
+pub struct GovernorLayer<
     K: KeyExtractor,
     M: RateLimitingMiddleware<QuantaInstant>,
+    RespBody,
+    Store = DefaultKeyedStateStore<<K as KeyExtractor>::Key>,
+> where
+    Store: StateStore<Key = K::Key>,
 {
-    config: Arc<GovernorConfig<K, M>>,
+    config: Arc<GovernorConfig<K, M, Store>>,
     error_handler: Option<ErrorHandler<RespBody>>,
 }
 
-impl<K, M, RespBody> GovernorLayer<K, M, RespBody>
+impl<K, M, RespBody, Store> GovernorLayer<K, M, RespBody, Store>
 where
     K: KeyExtractor,
     M: RateLimitingMiddleware<QuantaInstant>,
+    Store: StateStore<Key = K::Key>,
 {
     /// Create a new layer from config
-    pub fn new(config: impl Into<Arc<GovernorConfig<K, M>>>) -> Self {
+    pub fn new(config: impl Into<Arc<GovernorConfig<K, M, Store>>>) -> Self {
         Self {
             config: config.into(),
             error_handler: None,
@@ -59,12 +65,13 @@ where
     }
 }
 
-impl<K, M, S, RespBody> Layer<S> for GovernorLayer<K, M, RespBody>
+impl<K, M, S, RespBody, Store> Layer<S> for GovernorLayer<K, M, RespBody, Store>
 where
     K: KeyExtractor,
     M: RateLimitingMiddleware<QuantaInstant>,
+    Store: StateStore<Key = K::Key>,
 {
-    type Service = Governor<K, M, S, RespBody>;
+    type Service = Governor<K, M, S, RespBody, Store>;
 
     fn layer(&self, inner: S) -> Self::Service {
         let mut service = Governor::new(inner, &self.config);
@@ -74,8 +81,10 @@ where
 }
 
 /// https://stegosaurusdormant.com/understanding-derive-clone/
-impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, RespBody> Clone
-    for GovernorLayer<K, M, RespBody>
+impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, RespBody, Store> Clone
+    for GovernorLayer<K, M, RespBody, Store>
+where
+    Store: StateStore<Key = K::Key>,
 {
     fn clone(&self) -> Self {
         Self {
@@ -86,9 +95,11 @@ impl<K: KeyExtractor, M: RateLimitingMiddleware<QuantaInstant>, RespBody> Clone
 }
 
 // Implement tower::Service for Governor
-impl<K, S, ReqBody, RespBody> Service<Request<ReqBody>> for Governor<K, NoOpMiddleware, S, RespBody>
+impl<K, S, ReqBody, RespBody, Store> Service<Request<ReqBody>>
+    for Governor<K, NoOpMiddleware, S, RespBody, Store>
 where
     K: KeyExtractor,
+    Store: StateStore<Key = K::Key>,
     S: Service<Request<ReqBody>, Response = Response<RespBody>>,
     S::Response: From<GovernorError>,
 {
@@ -245,10 +256,11 @@ where
 }
 
 // Implementation of Service for Governor using the StateInformationMiddleware.
-impl<K, S, ReqBody, RespBody> Service<Request<ReqBody>>
-    for Governor<K, StateInformationMiddleware, S, RespBody>
+impl<K, S, ReqBody, RespBody, Store> Service<Request<ReqBody>>
+    for Governor<K, StateInformationMiddleware, S, RespBody, Store>
 where
     K: KeyExtractor,
+    Store: StateStore<Key = K::Key>,
     S: Service<Request<ReqBody>, Response = Response<RespBody>>,
     S::Response: From<GovernorError>,
     // Body type of response must impl From<String> trait to convert potential error
